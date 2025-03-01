@@ -1,0 +1,1 @@
+const INTENT_CORE_SHEET_URL = "./intent_core"
