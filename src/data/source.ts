@@ -1,3 +1,4 @@
+import { conceptId } from './conceptId';
 import { loadSeed } from './loadSeed';
 import { serializeConcepts } from './serialize';
 import type { Concept } from '../types';
@@ -14,20 +15,20 @@ export type ConceptSource = {
   total: number;
   /** Concepts in `[start, end)`, clamped to the available range. */
   fetchRange(start: number, end: number): Promise<Concept[]>;
-  /** Update a concept's primary notation (MathML + the TeX source it came from) in the canonical dataset. */
-  applyEdit(slug: string, mathml: string[], tex?: string): void;
-  /** Full backing-file content (seed `open.yml` shape) for committing to GitHub. */
+  /** Update a row's primary notation (MathML + the TeX it came from). `id` is `conceptId` (name#arity). */
+  applyEdit(id: string, mathml: string[], tex?: string): void;
+  /** Full backing-file content (W3C `open.yml` shape) for committing to GitHub. */
   serialize(): string;
 };
 
 export function createSource(concepts: Concept[]): ConceptSource {
   const all = concepts.slice();
-  const indexOf = new Map(all.map((c, i) => [c.slug, i]));
+  const indexOf = new Map(all.map((c, i) => [conceptId(c), i]));
   return {
     total: all.length,
     fetchRange: async (start, end) => all.slice(Math.max(0, start), Math.min(end, all.length)),
-    applyEdit: (slug, mathml, tex) => {
-      const i = indexOf.get(slug);
+    applyEdit: (id, mathml, tex) => {
+      const i = indexOf.get(id);
       if (i != null) all[i] = { ...all[i], mathml, tex };
     },
     serialize: () => serializeConcepts(all),

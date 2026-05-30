@@ -1,3 +1,4 @@
+import { conceptId } from './conceptId';
 import type { Concept } from '../types';
 
 /**
@@ -31,8 +32,9 @@ export function saveEdits(storage: Storage, edits: EditCache): void {
  */
 export function recordEdit(storage: Storage, value: Concept, baseValue: Concept | null): EditCache {
   const edits = loadEdits(storage);
-  const existing = edits[value.slug];
-  edits[value.slug] = { value, baseAtEdit: existing ? existing.baseAtEdit : baseValue };
+  const id = conceptId(value); // keyed by (concept, arity), not name alone
+  const existing = edits[id];
+  edits[id] = { value, baseAtEdit: existing ? existing.baseAtEdit : baseValue };
   saveEdits(storage, edits);
   return edits;
 }

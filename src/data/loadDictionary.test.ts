@@ -43,7 +43,7 @@ describe('loadDictionary', () => {
   });
 
   it('overlays local edits and conflicts-free when base is unchanged since the edit', async () => {
-    const edits: EditCache = { power: editRec('power', 'mine', 'p') };
+    const edits: EditCache = { 'power#': editRec('power', 'mine', 'p') }; // keyed by conceptId
     const { concepts, conflicts } = await loadDictionary(
       args({ fetchImpl: fetchFor({ power: 'p' }), edits }),
     );
@@ -51,12 +51,12 @@ describe('loadDictionary', () => {
     expect(conflicts).toEqual([]);
   });
 
-  it('flags a conflict when base advanced on a concept the user edited', async () => {
-    const edits: EditCache = { power: editRec('power', 'mine', 'p') }; // forked from "p"
+  it('flags a conflict (by conceptId) when base advanced on a concept the user edited', async () => {
+    const edits: EditCache = { 'power#': editRec('power', 'mine', 'p') }; // forked from "p"
     const { conflicts } = await loadDictionary(
       args({ fetchImpl: fetchFor({ power: 'p-upstream' }), edits }), // base moved to "p-upstream"
     );
-    expect(conflicts).toEqual(['power']);
+    expect(conflicts).toEqual(['power#']);
   });
 
   it('reads the user branch when a handle is given', async () => {
@@ -64,5 +64,20 @@ describe('loadDictionary', () => {
       args({ handle: 'dginev', fetchImpl: fetchFor({ power: 'p' }, { power: 'p', extra: 'e' }) }),
     );
     expect(concepts.map((c) => c.slug)).toContain('extra');
+  });
+
+  it('keeps overloaded concepts (same name, different arity) as distinct rows', async () => {
+    const yaml = w3cYaml([
+      { concept: 'disjoint-union', arity: 1, mathml: ['<math>u1</math>'] },
+      { concept: 'disjoint-union', arity: 2, mathml: ['<math>u2</math>'] },
+    ]);
+    const fetchImpl = (async (url: string) =>
+      url.includes('/main/')
+        ? { ok: true, status: 200, text: async () => yaml }
+        : { ok: false, status: 404, text: async () => '' }) as unknown as typeof fetch;
+
+    const { concepts } = await loadDictionary(args({ fetchImpl }));
+    expect(concepts).toHaveLength(2); // not collapsed by name
+    expect(concepts.map((c) => c.arity)).toEqual([1, 2]); // canonical (concept, arity) order
   });
 });

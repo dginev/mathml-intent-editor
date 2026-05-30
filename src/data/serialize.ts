@@ -23,10 +23,14 @@ function overlayArray(e: Record<string, unknown>, key: string, arr: string[]): v
  * Note: the editor-only `tex` is intentionally NOT written — adding a field to the shared file is a
  * W3C-format change (needs a group decision); `tex` lives only in the local edit cache.
  */
-/** Deterministic canonical order: ASCII (code-unit) by concept slug — matches `LC_ALL=C sort`,
- *  reproducible across machines, and closest to the W3C file's existing order. Minimizes PR churn. */
+/**
+ * Deterministic canonical order, fully determined by `(concept, arity)`: ASCII (code-unit) by slug,
+ * then ascending arity. Reproducible across machines, closest to the W3C file's order, and gives the
+ * overloaded names (e.g. disjoint-union 1 then 2) a stable position — minimizing PR churn.
+ */
 export function byConcept(a: Concept, b: Concept): number {
-  return a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0;
+  if (a.slug !== b.slug) return a.slug < b.slug ? -1 : 1;
+  return (a.arity ?? 0) - (b.arity ?? 0);
 }
 
 export function serializeConcepts(concepts: Concept[]): string {

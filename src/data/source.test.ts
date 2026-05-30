@@ -30,7 +30,7 @@ describe('createSource', () => {
 
   it('applies an edit (MathML + TeX) reflected in fetched ranges and serialization', async () => {
     const src = createSource(make(3));
-    src.applyEdit('c1', ['<mi intent="x">z</mi>'], '\\arg{x}{z}');
+    src.applyEdit('c1#', ['<mi intent="x">z</mi>'], '\\arg{x}{z}'); // id = conceptId (slug#arity)
 
     const [, c1] = await src.fetchRange(0, 3);
     expect(c1.mathml).toEqual(['<mi intent="x">z</mi>']);
