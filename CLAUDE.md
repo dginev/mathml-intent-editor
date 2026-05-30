@@ -113,12 +113,24 @@ Work **red→green**: write the failing test first, watch it fail for the right 
 
 ## App structure (root)
 
-- `public/open.yml` — the seed dictionary, copied verbatim from the reference repo; served as a static
-  asset and fetched at runtime. Swap for live GitHub fetch once the data layer is built.
+**Data source is dual** (chosen in `App`'s load effect): when `repoConfigFromEnv()` is set
+(`VITE_GH_OWNER`/`REPO`), the live path reads `open.yml` from GitHub (raw CDN) and reconciles
+client-side; otherwise (dev/e2e) it falls back to the seed ×`DEV_MULTIPLIER` so the 10k-row perf guard
+runs without a backend. So **don't remove the seed path** — the perf e2e depends on it.
+
+- `public/open.yml` — the seed dictionary (dev/e2e fixture, served statically).
 - `src/types.ts` — the `Concept` type (our model; see "Data model").
-- `src/data/loadSeed.ts` — fetches and parses `open.yml` into `Concept[]`, normalizing the loose seed
-  shape. Its `multiplier` arg clones concepts to simulate the 10k+ row target (set via `DEV_MULTIPLIER`
-  in `App.tsx`); use 1 for real data.
+- `src/data/parse.ts` — `parseDictionary(text)`: YAML `open.yml` → normalized `Concept[]` (shared by
+  the seed loader and the raw reader).
+- `src/data/loadSeed.ts` — fetches `public/open.yml` and clones ×`multiplier` to hit the 10k target.
+- `src/data/githubRaw.ts` — `rawUrl()` + `fetchDictionary()`: read `open.yml` from
+  `raw.githubusercontent` (ACAO:* → no CORS), `404 → null`.
+- `src/data/reconcile.ts` — `threeWayMerge(ancestor, ours, theirs)` over the slug-keyed map: adopt
+  upstream where untouched, keep user edits, report same-slug divergences as conflicts.
+- `src/data/editCache.ts` — persist the user's edits (value + `baseAtEdit` fork point) in
+  `localStorage` so a reload restores in-progress changes; `baseAtEdit` is the per-concept ancestor.
+- `src/data/loadDictionary.ts` — orchestrator: raw base (+ `intent/<handle>` branch when a handle
+  exists) ∪ local edits → `threeWayMerge` → `{ concepts, conflicts }`. `App` shows a conflict banner.
 - `src/data/source.ts` — `ConceptSource`: paged, **on-demand** access (`fetchRange(start,end)`, `total`,
   `applyEdit`, `serialize`). The UI knows `total` up front but pages rows in (PAGE=50 ≈ a couple of
   viewports) as the user scrolls — `App` grows a loaded prefix and `ConceptTable` calls `onLoadMore`
