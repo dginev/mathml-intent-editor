@@ -111,8 +111,9 @@
   position: relative;
 }
 
+/* Content-width table, centred on wide screens; scrolls horizontally when narrower than the viewport. */
 .table-inner {
-  min-width: 100%;
+  margin-inline: auto;
 }
 
 .thead {
@@ -147,7 +148,14 @@
   cursor: pointer;
 }
 
-/* ---- layout: table + editor side panel ---- */
+/* The row currently open in the editor — highlighted (and scrolled to centre) behind the modal. */
+.tbody .tr.row-editing {
+  background: var(--hover);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* ---- layout: a single centred table fills the body ---- */
 .body {
   flex: 1 1 auto;
   display: flex;
@@ -158,12 +166,20 @@
   flex: 1 1 auto;
 }
 
-.editor-panel {
-  flex: 0 0 420px;
-  border-left: 1px solid var(--border);
+/* ---- edit modal (native <dialog>, auto-centred by the UA) ---- */
+.modal {
+  border: 1px solid var(--border);
+  border-radius: 10px;
   background: var(--surface);
+  color: var(--text);
+  padding: 1rem 1.25rem;
+  width: min(560px, 92vw);
+  max-height: 85vh;
   overflow: auto;
-  padding: 1rem;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+.modal::backdrop {
+  background: rgba(0, 0, 0, 0.5);
 }
 
 /* ---- notation editor ---- */

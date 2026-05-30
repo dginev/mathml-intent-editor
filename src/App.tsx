@@ -47,6 +47,15 @@ export default function App() {
   const [editing, setEditing] = useState<Concept | null>(null);
   const [conflicts, setConflicts] = useState<string[]>([]);
   const loadingRef = useRef(false);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  // Drive the native modal dialog from `editing` (showModal centres + traps focus; close() on cancel).
+  useEffect(() => {
+    const d = dialogRef.current;
+    if (!d) return;
+    if (editing && !d.open) d.showModal();
+    else if (!editing && d.open) d.close();
+  }, [editing]);
 
   // Config: backing repo (raw reads) and the auth+PR service. Either may be absent → graceful fallback.
   const repo = useMemo(() => repoConfigFromEnv(), []);
@@ -267,22 +276,32 @@ export default function App() {
             filter={filter}
             onSelect={openEditor}
             onLoadMore={loadMore}
+            editingId={editing ? conceptId(editing) : null}
           />
         )}
-
-        {editing && (
-          <aside className="editor-panel">
-            <Suspense fallback={<p className="status">Loading editor…</p>}>
-              <NotationEditor
-                concept={editing.slug}
-                initialTex={editing.tex ?? ''}
-                onSave={handleSave}
-                onCancel={() => setEditing(null)}
-              />
-            </Suspense>
-          </aside>
-        )}
       </div>
+
+      {/* Native <dialog>: focus trap, Esc to close, focus restore, inert background — for free. */}
+      <dialog
+        ref={dialogRef}
+        className="modal"
+        aria-label={editing ? `Edit notation: ${editing.slug}` : undefined}
+        onClose={() => setEditing(null)}
+        onClick={(e) => {
+          if (e.target === dialogRef.current) setEditing(null); // backdrop click
+        }}
+      >
+        {editing && (
+          <Suspense fallback={<p className="status">Loading editor…</p>}>
+            <NotationEditor
+              concept={editing.slug}
+              initialTex={editing.tex ?? ''}
+              onSave={handleSave}
+              onCancel={() => setEditing(null)}
+            />
+          </Suspense>
+        )}
+      </dialog>
     </div>
   );
 }

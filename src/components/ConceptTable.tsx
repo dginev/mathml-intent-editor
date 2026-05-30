@@ -9,6 +9,7 @@ import {
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { Concept } from '../types';
+import { conceptId } from '../data/conceptId';
 import { MathML } from './MathML';
 
 const columnHelper = createColumnHelper<Concept>();
@@ -49,6 +50,7 @@ export function ConceptTable({
   filter,
   onSelect,
   onLoadMore,
+  editingId,
 }: {
   /** The rows loaded so far (a growing prefix of the full list). */
   data: Concept[];
@@ -57,6 +59,8 @@ export function ConceptTable({
   filter: string;
   onSelect?: (concept: Concept) => void;
   onLoadMore?: () => void;
+  /** conceptId of the row being edited — highlighted and scrolled to centre while the modal is open. */
+  editingId?: string | null;
 }) {
   const table = useReactTable({
     data,
@@ -86,6 +90,14 @@ export function ConceptTable({
     if (data.length < total && lastIndex >= rows.length - LOAD_THRESHOLD) onLoadMore?.();
   }, [lastIndex, rows.length, data.length, total, onLoadMore]);
 
+  // When a row opens in the editor, scroll it to the centre (it sits behind the centred modal).
+  useEffect(() => {
+    if (!editingId) return;
+    const idx = rows.findIndex((r) => conceptId(r.original) === editingId);
+    if (idx >= 0) virtualizer.scrollToIndex(idx, { align: 'center' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingId]);
+
   return (
     <div className="table-scroll" ref={scrollRef} data-testid="table-scroll">
       <div className="table-inner" style={{ width: totalWidth }}>
@@ -106,7 +118,7 @@ export function ConceptTable({
             const row = rows[vi.index];
             return (
               <div
-                className="tr row-clickable"
+                className={`tr row-clickable${conceptId(row.original) === editingId ? ' row-editing' : ''}`}
                 key={row.id}
                 data-row-index={vi.index}
                 data-slug={row.original.slug}
