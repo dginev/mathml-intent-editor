@@ -49,6 +49,11 @@ export default function App() {
   // configured; without a service the app is local-only (no gate, no PRs).
   const [identity, setIdentity] = useState<Identity | null>(() => loadIdentity(localStorage));
   const [submitState, setSubmitState] = useState<string | null>(null);
+  // True from the moment we return with an OAuth code until /auth resolves — drives the "Signing in…"
+  // spinner. Initialized synchronously so the spinner shows immediately on the redirect back.
+  const [authPending, setAuthPending] = useState(
+    () => !!(serviceConfigFromEnv() && parseCallback(window.location.search)),
+  );
   const handle = identity?.handle ?? null;
 
   // Complete the OAuth redirect (?code=…&state=…): verify state, exchange via /auth, store identity.
@@ -65,7 +70,9 @@ export default function App() {
           setIdentity(id);
         })
       : Promise.reject(new Error('state mismatch'))
-    ).catch((e) => setSubmitState(`Sign-in failed: ${e instanceof Error ? e.message : String(e)}`));
+    )
+      .catch((e) => setSubmitState(`Sign-in failed: ${e instanceof Error ? e.message : String(e)}`))
+      .finally(() => setAuthPending(false));
   }, [service]);
 
   // Load the dictionary. Reloads when the signed-in handle changes (to read the user's branch).
@@ -189,12 +196,18 @@ export default function App() {
           <span className="session-status">
             {!service
               ? 'GitHub not configured — local only'
-              : identity
-                ? (submitState ?? `signed in as @${identity.handle}`)
-                : 'Sign in to contribute'}
+              : authPending
+                ? 'Signing in…'
+                : identity
+                  ? (submitState ?? `signed in as @${identity.handle}`)
+                  : 'Sign in to contribute'}
           </span>
           {service &&
-            (identity ? (
+            (authPending ? (
+              <button type="button" className="auth-btn" disabled>
+                <span className="spinner" aria-hidden="true" /> Signing in…
+              </button>
+            ) : identity ? (
               <button type="button" className="auth-btn" onClick={signOut}>
                 Sign out (@{identity.handle})
               </button>
