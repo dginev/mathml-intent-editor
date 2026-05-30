@@ -1,6 +1,7 @@
 import { fetchDictionary, rawUrl } from './githubRaw';
 import { threeWayMerge, type ConceptMap } from './reconcile';
 import { byConcept } from './serialize';
+import { conceptId } from './conceptId';
 import type { EditCache } from './editCache';
 import type { Concept } from '../types';
 
@@ -17,7 +18,7 @@ export type LoadArgs = {
 };
 
 const toMap = (concepts: Concept[]): ConceptMap =>
-  Object.fromEntries(concepts.map((c) => [c.slug, c]));
+  Object.fromEntries(concepts.map((c) => [conceptId(c), c]));
 
 /**
  * Load the working dictionary, reconciled client-side:
@@ -44,10 +45,10 @@ export async function loadDictionary(
   const ours: ConceptMap = { ...(branch ? toMap(branch) : baseMap) };
   const ancestor: ConceptMap = { ...baseMap };
 
-  for (const [slug, rec] of Object.entries(edits)) {
-    ours[slug] = rec.value;
-    if (rec.baseAtEdit) ancestor[slug] = rec.baseAtEdit;
-    else delete ancestor[slug]; // brand-new concept: absent in the ancestor
+  for (const [id, rec] of Object.entries(edits)) {
+    ours[id] = rec.value;
+    if (rec.baseAtEdit) ancestor[id] = rec.baseAtEdit;
+    else delete ancestor[id]; // brand-new concept: absent in the ancestor
   }
 
   const { merged, conflicts } = threeWayMerge(ancestor, ours, baseMap);

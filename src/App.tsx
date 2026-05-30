@@ -2,6 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } fro
 import { createSeedSource, createSource, type ConceptSource } from './data/source';
 import { loadDictionary } from './data/loadDictionary';
 import { loadEdits, recordEdit } from './data/editCache';
+import { conceptId } from './data/conceptId';
 import { ConceptTable } from './components/ConceptTable';
 import type { SavedNotation } from './components/NotationEditor';
 import {
@@ -142,11 +143,12 @@ export default function App() {
     (notation: SavedNotation) => {
       if (!editing || !source) return;
       const slug = editing.slug;
+      const id = conceptId(editing); // (concept, arity) — overloaded names share a slug
       // Store the W3C shape: a full <math>…</math> string (texToIntent returns the inner fragment).
       const rendered = `<math>${notation.mathml}</math>`;
       const mathml = [rendered, ...editing.mathml.slice(1)];
-      source.applyEdit(slug, mathml, notation.tex); // canonical full dataset (used for the PR file)
-      setRows((prev) => prev.map((c) => (c.slug === slug ? { ...c, mathml, tex: notation.tex } : c)));
+      source.applyEdit(id, mathml, notation.tex); // canonical full dataset (used for the PR file)
+      setRows((prev) => prev.map((c) => (conceptId(c) === id ? { ...c, mathml, tex: notation.tex } : c)));
       if (repo) recordEdit(localStorage, { ...editing, mathml, tex: notation.tex }, editing); // reload-safe
       setEditing(null);
 
