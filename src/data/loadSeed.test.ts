@@ -1,21 +1,23 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadSeed } from './loadSeed';
+import { w3cYaml } from '../test/dictFixture';
 
-const SAMPLE_YAML = `
-power:
-  en: $_1 to the $_2
-  area: arithmetic
-  mathml:
-   - "<msup><mi arg='_1'>x</mi><mi arg='_2'>n</mi></msup>"
-  links:
-   - "https://en.wikipedia.org/wiki/Exponentiation"
-  alias:
-   - exponentiation
-abelian-category:
-  en: abelian category
-  area:
-  mathml: "<mi intent='abelian-category'>Ab</mi>"
-`;
+const SAMPLE_YAML = w3cYaml([
+  {
+    concept: 'power',
+    en: '$1 to the $2',
+    area: 'arithmetic',
+    mathml: ["<math><msup><mi arg='1'>x</mi><mi arg='2'>n</mi></msup></math>"],
+    urls: ['https://en.wikipedia.org/wiki/Exponentiation'],
+    alias: ['exponentiation'],
+  },
+  {
+    concept: 'abelian-category',
+    en: 'abelian category',
+    area: '',
+    mathml: "<math><mi intent='abelian-category'>Ab</mi></math>", // scalar → one-element array
+  },
+]);
 
 function mockFetch(body: string, ok = true) {
   vi.stubGlobal(
@@ -33,13 +35,14 @@ describe('loadSeed', () => {
 
     expect(concepts).toHaveLength(2);
     const power = concepts.find((c) => c.slug === 'power')!;
-    expect(power.en).toBe('$_1 to the $_2');
+    expect(power.en).toBe('$1 to the $2');
     expect(power.area).toBe('arithmetic');
     expect(power.alias).toEqual(['exponentiation']);
+    expect(power.links).toEqual(['https://en.wikipedia.org/wiki/Exponentiation']); // from `urls`
 
     // A scalar `mathml` becomes a one-element array; empty `area` becomes undefined.
     const ab = concepts.find((c) => c.slug === 'abelian-category')!;
-    expect(ab.mathml).toEqual(["<mi intent='abelian-category'>Ab</mi>"]);
+    expect(ab.mathml).toEqual(["<math><mi intent='abelian-category'>Ab</mi></math>"]);
     expect(ab.area).toBeUndefined();
     expect(ab.links).toEqual([]);
   });

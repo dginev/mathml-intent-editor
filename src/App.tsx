@@ -142,7 +142,9 @@ export default function App() {
     (notation: SavedNotation) => {
       if (!editing || !source) return;
       const slug = editing.slug;
-      const mathml = [notation.mathml, ...editing.mathml.slice(1)];
+      // Store the W3C shape: a full <math>…</math> string (texToIntent returns the inner fragment).
+      const rendered = `<math>${notation.mathml}</math>`;
+      const mathml = [rendered, ...editing.mathml.slice(1)];
       source.applyEdit(slug, mathml, notation.tex); // canonical full dataset (used for the PR file)
       setRows((prev) => prev.map((c) => (c.slug === slug ? { ...c, mathml, tex: notation.tex } : c)));
       if (repo) recordEdit(localStorage, { ...editing, mathml, tex: notation.tex }, editing); // reload-safe

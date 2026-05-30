@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fetchDictionary, rawUrl } from './githubRaw';
+import { w3cYaml } from '../test/dictFixture';
 
 describe('rawUrl', () => {
   it('builds a raw.githubusercontent URL for a ref', () => {
@@ -13,7 +14,7 @@ describe('rawUrl', () => {
 });
 
 describe('fetchDictionary', () => {
-  const yaml = 'power:\n  mathml:\n   - "<msup/>"\n';
+  const yaml = w3cYaml([{ concept: 'power', mathml: ['<math><msup/></math>'] }]);
 
   it('fetches and parses the dictionary', async () => {
     const fetchImpl = vi.fn(async () => ({ ok: true, status: 200, text: async () => yaml })) as unknown as typeof fetch;

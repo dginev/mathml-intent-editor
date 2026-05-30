@@ -18,7 +18,9 @@ export default defineConfig({
   // Use the system Google Chrome (the bundled Chromium has no build for this OS).
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], channel: 'chrome' } }],
   webServer: {
-    command: 'npm run build && npm run preview',
+    // Build in `test` mode so .env.test forces the GitHub integration off (seed fixture, ungated) —
+    // independent of any developer .env.local.
+    command: 'npm run build -- --mode test && npm run preview',
     url: 'http://localhost:4173',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

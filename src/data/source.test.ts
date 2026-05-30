@@ -34,10 +34,13 @@ describe('createSource', () => {
 
     const [, c1] = await src.fetchRange(0, 3);
     expect(c1.mathml).toEqual(['<mi intent="x">z</mi>']);
-    expect(c1.tex).toBe('\\arg{x}{z}');
+    expect(c1.tex).toBe('\\arg{x}{z}'); // tex kept in-memory
 
-    const map = parse(src.serialize()) as Record<string, { mathml?: string[]; tex?: string }>;
-    expect(map['c1'].mathml).toEqual(['<mi intent="x">z</mi>']);
-    expect(map['c1'].tex).toBe('\\arg{x}{z}');
+    const doc = parse(src.serialize()) as {
+      concepts: Array<{ intents: Array<{ concept: string; mathml?: string[] }> }>;
+    };
+    const e = doc.concepts[0].intents.find((x) => x.concept === 'c1')!;
+    expect(e.mathml).toEqual(['<mi intent="x">z</mi>']);
+    expect('tex' in e).toBe(false); // tex stays local, never written to open.yml
   });
 });
