@@ -32,35 +32,40 @@ These are the product requirements, independent of framework choice:
 
 ## Data model
 
-We **own the data model** — `open.yml` is the *seed/reference* shape, not a fixed contract. Extend or
-restructure it freely when the current shape hits a dead end (e.g. richer notation metadata, per-language
-speech, provenance for the PR/curation workflow). Keep an importer from the seed format, and document any
-schema change here.
-
-The seed format is `open.yml` in `~/git/mathml-intent-open/` (~10.6k lines today). It is a YAML
-map keyed by **concept slug** (kebab-case). Each entry:
+The canonical format is the **W3C MathML Intent `open.yml`** (`w3c/mathml-docs` `_data/open.yml`; the
+backing repo `dginev/mathml-intent-open` mirrors it). **We do not change this schema** — changes need a
+W3C group decision — so the parser/serializer conform to it and round-trip unknown fields. It's a single
+`concepts:` group of `intents:` entries:
 
 ```yaml
-additive-inverse:
-  en: additive inverse of $_1        # speech template; $_1, $_2… are positional argument refs
-  area: abstract algebra             # subject area (may be empty)
-  mathml:                            # one or more example renderings, as MathML strings
-   - "<mrow intent='additive-inverse($_1)'><mo>-</mo><mi arg='_1'>n</mi></mrow>"
-  links:                             # reference URLs
-   - "https://en.wikipedia.org/wiki/Additive_inverse"
-  alias:                             # alternate names/slugs
-   - opposite
-   - negation
+concepts:
+  - title: Open Concepts
+    intents:
+    - concept: abelian-category        # the name/slug
+      arity: 0                          # argument count
+      en: abelian category             # speech template; $1, $2… are positional arg refs
+      property: symbol                  # notation form (symbol/indexed/prefix/function/…)
+      area: "category theory"
+      mathml:                           # one or more FULL <math>…</math> renderings
+       - "<math><mi intent='abelian-category'>Ab</mi></math>"
+      urls: ["…"]                       # reference URLs  (→ Concept.links)
+      # optional: alias, notation/notationa…, comments
 ```
 
-Notes for working with the data:
-- `mathml` strings carry `intent='…'` on the root and `arg='_N'` on argument leaves — this is the MathML
-  Intent annotation the spec defines. The TeX→MathML renderer must produce/round-trip these.
-- Other reference shapes exist and are **not** the target format: `intent_open.yml` is an older
-  notation/speech-chunk template; `intent_open_seed.json` / `open.yml`-derived JSON use `subject` / `form` /
-  `sources` / `notation` keys. Treat `open.yml` as canonical.
-- `grow.pl` in the reference repo multiplies every concept ×50 into `large_open.yml` — use it to generate
-  realistic >10k-row fixtures for testing table performance.
+Mapping to `Concept` (`src/types.ts`): `concept→slug`, `urls→links`, plus `arity`/`property`; the
+original entry is kept in `raw` for **lossless** serialization (preserves `notation*`/`comments`/key
+order). `Concept.tex` (editor-authored TeX) is **local-only** — never written to `open.yml`.
+
+Key facts (verified against the real file, 1012 entries):
+- A concept **name can be overloaded across arities** (`disjoint-union` 1&2, `whittaker-function` 2&3).
+  `(concept, arity)` is globally **unique** and is the row identity — `conceptId(c)='${slug}#${arity}'`
+  keys the reconcile map, edit cache, source index, and edits, so overloads never collapse.
+- **Canonical order is `(concept, arity)`** — ASCII by name, then ascending arity (`byConcept`). The
+  serializer emits this deterministically (`lineWidth:0`, lossless via `raw`); `canonical.test.ts` proves
+  parse→serialize is lossless + idempotent on the real file. This is what keeps PR diffs minimal.
+- `mathml` items are full `<math>…</math>` carrying `intent='…'`/`arg='…'`; the editor stores edits the
+  same way (`<math>` + the `texToIntent` fragment).
+- `public/open.yml` is a copy of the real file, used as the dev/e2e fixture (×`DEV_MULTIPLIER` for 10k rows).
 
 ## Chosen stack
 
