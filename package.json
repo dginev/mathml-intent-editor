@@ -18,7 +18,7 @@
     "@tanstack/react-virtual": "^3.13.26",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "temml": "file:../Temml",
+    "temml": "github:dginev/Temml#intent-arg-annotations",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
