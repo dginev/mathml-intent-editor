@@ -58,6 +58,21 @@ export async function exchangeCodeForToken(
   return data.access_token;
 }
 
+/**
+ * Resolve the authenticated user's GitHub handle (login). Identity is a prerequisite for editing —
+ * we record who is suggesting a change, even though the PR itself is opened by our controlled account.
+ * (`api.github.com` is CORS-enabled, so this works from the browser.)
+ */
+export async function fetchHandle(token: string, fetchImpl: typeof fetch = fetch): Promise<string> {
+  const res = await fetchImpl('https://api.github.com/user', {
+    headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json' },
+  });
+  if (!res.ok) throw new Error(`Failed to resolve GitHub user: ${res.status}`);
+  const data = (await res.json()) as { login?: string };
+  if (!data.login) throw new Error('GitHub user response had no login');
+  return data.login;
+}
+
 export function saveToken(storage: Storage, token: string): void {
   storage.setItem(TOKEN_KEY, token);
 }

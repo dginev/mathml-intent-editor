@@ -3,6 +3,7 @@ import {
   buildAuthorizeUrl,
   consumeState,
   exchangeCodeForToken,
+  fetchHandle,
   loadToken,
   parseCallback,
   rememberState,
@@ -73,6 +74,24 @@ describe('exchangeCodeForToken', () => {
     await expect(exchangeCodeForToken('p', 'c', bad)).rejects.toThrow();
     const noToken = (async () => ({ ok: true, status: 200, json: async () => ({}) })) as unknown as typeof fetch;
     await expect(exchangeCodeForToken('p', 'c', noToken)).rejects.toThrow();
+  });
+});
+
+describe('fetchHandle', () => {
+  it('resolves the authenticated user login from the token', async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ login: 'dginev' }),
+    })) as unknown as typeof fetch;
+    expect(await fetchHandle('gho_x', fetchImpl)).toBe('dginev');
+  });
+
+  it('throws when the user request fails or has no login', async () => {
+    const bad = (async () => ({ ok: false, status: 401, json: async () => ({}) })) as unknown as typeof fetch;
+    await expect(fetchHandle('t', bad)).rejects.toThrow();
+    const noLogin = (async () => ({ ok: true, status: 200, json: async () => ({}) })) as unknown as typeof fetch;
+    await expect(fetchHandle('t', noLogin)).rejects.toThrow();
   });
 });
 
