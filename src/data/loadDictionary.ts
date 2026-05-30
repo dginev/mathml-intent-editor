@@ -1,5 +1,6 @@
 import { fetchDictionary, rawUrl } from './githubRaw';
 import { threeWayMerge, type ConceptMap } from './reconcile';
+import { byConcept } from './serialize';
 import type { EditCache } from './editCache';
 import type { Concept } from '../types';
 
@@ -50,6 +51,6 @@ export async function loadDictionary(
   }
 
   const { merged, conflicts } = threeWayMerge(ancestor, ours, baseMap);
-  const concepts = Object.values(merged).sort((a, b) => a.slug.localeCompare(b.slug));
+  const concepts = Object.values(merged).sort(byConcept); // canonical ASCII order
   return { concepts, conflicts };
 }

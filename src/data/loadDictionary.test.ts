@@ -2,11 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { loadDictionary } from './loadDictionary';
 import type { EditCache } from './editCache';
 import type { Concept } from '../types';
+import { w3cYaml } from '../test/dictFixture';
 
 const doc = (entries: Record<string, string>) =>
-  Object.entries(entries)
-    .map(([slug, m]) => `${slug}:\n  mathml:\n   - "${m}"\n`)
-    .join('');
+  w3cYaml(Object.entries(entries).map(([concept, m]) => ({ concept, mathml: [m] })));
 
 // Mock fetch keyed by URL: base (main) vs the user's branch.
 function fetchFor(base: Record<string, string>, branch?: Record<string, string>) {

@@ -1,35 +1,58 @@
 import { parse } from 'yaml';
 import { describe, expect, it } from 'vitest';
 import { serializeConcepts } from './serialize';
+import { parseDictionary } from './parse';
 import type { Concept } from '../types';
 
-const concepts: Concept[] = [
-  {
-    slug: 'additive-inverse',
-    en: 'additive inverse of $x',
-    area: 'abstract algebra',
-    mathml: ['<mrow intent="additive-inverse($x)"><mo>-</mo><mi arg="x">n</mi></mrow>'],
-    links: ['https://en.wikipedia.org/wiki/Additive_inverse'],
-    alias: ['negation'],
-  },
-  { slug: 'lonely', en: undefined, area: undefined, mathml: [], links: [], alias: [] },
-];
+const concept = (over: Partial<Concept> & { slug: string }): Concept => ({
+  en: undefined,
+  area: undefined,
+  mathml: [],
+  links: [],
+  alias: [],
+  ...over,
+});
 
 describe('serializeConcepts', () => {
-  it('round-trips through the seed YAML shape keyed by slug', () => {
-    const map = parse(serializeConcepts(concepts)) as Record<string, Record<string, unknown>>;
-
-    expect(Object.keys(map)).toEqual(['additive-inverse', 'lonely']);
-    expect(map['additive-inverse'].en).toBe('additive inverse of $x');
-    expect(map['additive-inverse'].area).toBe('abstract algebra');
-    expect(map['additive-inverse'].mathml).toHaveLength(1);
-    expect(map['additive-inverse'].alias).toEqual(['negation']);
+  it('writes the W3C shape: a single concepts group of intents', () => {
+    const out = serializeConcepts([
+      concept({ slug: 'power', arity: 2, en: 'power', area: 'arithmetic', mathml: ['<math/>'], links: ['u'] }),
+    ]);
+    const doc = parse(out) as { concepts: Array<{ title: string; intents: Array<Record<string, unknown>> }> };
+    expect(doc.concepts).toHaveLength(1);
+    expect(doc.concepts[0].title).toBe('Open Concepts');
+    const e = doc.concepts[0].intents[0];
+    expect(e.concept).toBe('power');
+    expect(e.arity).toBe(2);
+    expect(e.urls).toEqual(['u']); // links → urls
+    expect('links' in e).toBe(false);
   });
 
-  it('omits empty/absent fields rather than emitting null', () => {
-    const map = parse(serializeConcepts(concepts)) as Record<string, Record<string, unknown>>;
-    expect(map['lonely']).toEqual({});
-    expect('en' in map['lonely']).toBe(false);
-    expect('mathml' in map['lonely']).toBe(false);
+  it('emits concepts in canonical ASCII order regardless of input order', () => {
+    const out = serializeConcepts([concept({ slug: 'beta' }), concept({ slug: 'alpha' })]);
+    const doc = parse(out) as { concepts: Array<{ intents: Array<{ concept: string }> }> };
+    expect(doc.concepts[0].intents.map((e) => e.concept)).toEqual(['alpha', 'beta']);
+  });
+
+  it('preserves unmodeled fields via raw, and never writes tex', () => {
+    const out = serializeConcepts([
+      concept({ slug: 'x', tex: '\\arg{a}{x}', raw: { concept: 'x', property: 'symbol', notation: 'legacy', arity: 1 } }),
+    ]);
+    const e = (parse(out) as { concepts: Array<{ intents: Array<Record<string, unknown>> }> }).concepts[0]
+      .intents[0];
+    expect(e.property).toBe('symbol'); // preserved from raw
+    expect(e.notation).toBe('legacy'); // preserved from raw
+    expect('tex' in e).toBe(false); // editor-only, never persisted to the shared file
+  });
+
+  it('round-trips parse → serialize → parse without losing concepts', () => {
+    const yaml = serializeConcepts([
+      concept({ slug: 'a', arity: 0, mathml: ['<math><mi>A</mi></math>'], raw: { concept: 'a', property: 'symbol' } }),
+      concept({ slug: 'b', arity: 1, mathml: ['<math><mi>B</mi></math>'] }),
+    ]);
+    const back = parseDictionary(yaml);
+    expect(back.map((c) => c.slug)).toEqual(['a', 'b']);
+    expect(back[0].arity).toBe(0);
+    expect(back[0].property).toBe('symbol');
   });
 });

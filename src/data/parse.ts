@@ -1,38 +1,48 @@
 import { parse } from 'yaml';
 import type { Concept } from '../types';
 
-/**
- * Raw shape of a single `open.yml` entry. Every field is optional/loose because the source is
- * hand-authored and inconsistent (e.g. `area:` is sometimes empty, `alias` is sometimes a string).
- */
-type RawEntry = {
+/** A raw `intents:` entry. Loose because the file is hand-authored; unknown keys are kept in `raw`. */
+type RawEntry = Record<string, unknown> & {
+  concept?: string;
   en?: string;
   area?: string | null;
+  arity?: number;
+  property?: string;
   mathml?: string | string[];
-  tex?: string;
-  links?: string | string[];
+  urls?: string | string[];
   alias?: string | string[];
 };
 
-const asArray = (v: string | string[] | null | undefined): string[] =>
-  v == null ? [] : Array.isArray(v) ? v : [v];
+type Doc = { concepts?: Array<{ title?: string; intents?: RawEntry[] }> };
 
-function normalize(slug: string, raw: RawEntry): Concept {
+const asArray = (v: unknown): string[] =>
+  v == null ? [] : Array.isArray(v) ? (v as string[]) : [String(v)];
+
+function normalize(e: RawEntry): Concept {
   return {
-    slug,
-    en: raw.en ?? undefined,
-    area: raw.area?.trim() || undefined,
-    mathml: asArray(raw.mathml),
-    tex: raw.tex || undefined,
-    links: asArray(raw.links),
-    alias: asArray(raw.alias),
+    slug: String(e.concept),
+    en: typeof e.en === 'string' ? e.en : undefined,
+    area: typeof e.area === 'string' ? e.area.trim() || undefined : undefined,
+    arity: typeof e.arity === 'number' ? e.arity : undefined,
+    property: typeof e.property === 'string' ? e.property : undefined,
+    mathml: asArray(e.mathml),
+    links: asArray(e.urls),
+    alias: asArray(e.alias),
+    raw: e,
   };
 }
 
-/** Parse an `open.yml` document (slug-keyed map) into a normalized `Concept[]`. */
+/**
+ * Parse the W3C `open.yml` (`concepts: [{ title, intents: [...] }]`) into a flat `Concept[]`.
+ * Tolerates multiple groups, though the canonical file has one ("Open Concepts").
+ */
 export function parseDictionary(text: string): Concept[] {
-  const map = parse(text) as Record<string, RawEntry | null>;
-  return Object.entries(map)
-    .filter(([, raw]) => raw != null)
-    .map(([slug, raw]) => normalize(slug, raw as RawEntry));
+  const doc = parse(text) as Doc | null;
+  const out: Concept[] = [];
+  for (const group of doc?.concepts ?? []) {
+    for (const entry of group?.intents ?? []) {
+      if (entry && typeof entry.concept === 'string') out.push(normalize(entry));
+    }
+  }
+  return out;
 }

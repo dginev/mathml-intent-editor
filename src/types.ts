@@ -1,25 +1,33 @@
 /**
- * The editor's own data model. `open.yml` (the seed) is only a starting shape — we own this type
- * and extend it as the curation workflow needs (see CLAUDE.md "Data model"). Seed import lives in
- * `data/loadSeed.ts`; anything not in the seed is optional here so imported rows stay valid.
+ * The editor's data model — a normalized view of one entry in the W3C MathML Intent `open.yml`
+ * (w3c/mathml-docs `_data/open.yml`; the backing repo mirrors it). The on-disk schema is a single
+ * `concepts:` group of `intents:` entries with keys `concept`/`arity`/`en`/`property`/`area`/
+ * `mathml`/`urls`/`alias` (+ legacy `notation*`/`comments`). We keep that format unchanged — schema
+ * changes require a W3C group decision — and round-trip unknown fields via `raw`.
  */
 export type Concept = {
-  /** kebab-case identifier; the YAML map key in the seed. Unique per dictionary. */
+  /** kebab-case identifier (the `concept:` key). Unique per dictionary. */
   slug: string;
-  /** English speech template. Positional argument refs are written `$_1`, `$_2`, … */
+  /** English speech template. Positional argument refs are written `$1`, `$2`, … */
   en?: string;
-  /** Subject area, e.g. "number theory". May be empty in the seed. */
+  /** Subject area, e.g. "number theory". */
   area?: string;
-  /** One or more example renderings as MathML strings, carrying `intent=`/`arg=` annotations. */
+  /** Argument count of the concept. */
+  arity?: number;
+  /** Notation form, e.g. "symbol", "indexed", "prefix", "function". */
+  property?: string;
+  /** Example renderings as full `<math>…</math>` strings, carrying `intent=`/`arg=` annotations. */
   mathml: string[];
+  /** Reference URLs (the `urls:` key). */
+  links: string[];
+  /** Alternate names/slugs. */
+  alias: string[];
   /**
-   * TeX source for the primary notation, when authored in this editor. MathML (above) stays the
-   * canonical artifact; `tex` is kept so re-editing reopens the original source. Absent for seed
-   * entries (which only ship MathML) — those re-author from blank.
+   * Editor-authored TeX source — kept **locally only** (edit cache), so re-editing reopens the
+   * original source. NOT written to `open.yml` (that would change the W3C format). Absent for entries
+   * loaded from the file.
    */
   tex?: string;
-  /** Reference URLs. */
-  links: string[];
-  /** Alternate names/slugs for the concept. */
-  alias: string[];
+  /** The original YAML entry, preserved so serialization round-trips fields we don't model. */
+  raw?: Record<string, unknown>;
 };

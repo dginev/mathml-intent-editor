@@ -10,10 +10,21 @@ export type MergeResult = {
   conflicts: string[];
 };
 
-/** Stable identity of a concept's content (order-sensitive on arrays); `undefined` = absent/deleted. */
+/**
+ * Stable identity of a concept's *file* content (order-sensitive on arrays); `undefined` = absent.
+ * Excludes the editor-only `tex` (local, not in open.yml) so it never triggers a reconcile conflict.
+ */
 function contentKey(c?: Concept): string {
   if (!c) return '∅';
-  return JSON.stringify([c.en ?? null, c.area ?? null, c.tex ?? null, c.mathml, c.links, c.alias]);
+  return JSON.stringify([
+    c.en ?? null,
+    c.area ?? null,
+    c.arity ?? null,
+    c.property ?? null,
+    c.mathml,
+    c.links,
+    c.alias,
+  ]);
 }
 
 const same = (a?: Concept, b?: Concept) => contentKey(a) === contentKey(b);
