@@ -185,21 +185,32 @@ force-reinstall, do **not** symlink: Vite-following a symlink can load Temml twi
 `App` loads/persists the session, builds the backend from env, and on Save commits + opens/updates the
 PR when configured. Dev uses `VITE_GH_TOKEN`.
 
-### Decisions (confirmed with the user)
+### Architecture (confirmed with the user — target design)
 
-- **Auth: user GitHub OAuth via a token-exchange proxy.** Each contributor signs in with their own
-  GitHub account (PRs attributed to them); a small serverless proxy completes the OAuth code→token
-  exchange (GitHub OAuth needs a client secret, so it can't be pure-client). This relaxes the original
-  "anonymous" wording in favor of real attribution + standard moderation. **Client side is built**
-  (`auth.ts` + sign-in/out + callback handling in `App`); the **server-side token-exchange proxy** is
-  the remaining piece to deploy (the endpoint `VITE_GH_OAUTH_PROXY` points at).
-- **Storage: single `open.yml`** for now (matches the seed). Known cost: whole-file diffs per save and
-  concurrent-edit conflicts — revisit (per-concept files / sharding) if contention becomes real.
+The earlier "user opens the PR with their own token" model was replaced. The agreed design:
+
+- **Identity is a prerequisite to edit.** Sign-in resolves the contributor's GitHub `@handle` before
+  any editing is possible. Identity is used for attribution, *not* for pushing.
+- **Bot opens the PRs via a single GitHub App.** One GitHub App does both: user-to-server OAuth (to
+  read the `@handle`) and an installation token (to commit as our controlled account). Attribution is a
+  "Proposed by @handle" line in the **PR body** (bot is the commit author).
+- **Backend = a Node/Fastify microservice on the `latexml.rs` VM**, behind the VM's existing **Caddy**
+  (auto-HTTPS + CORS for the Pages origin). Stateless **JWT** sessions (no session store). Endpoints:
+  `/auth` (OAuth code → verified handle → JWT) and `/submit` (verify JWT → bot commits to
+  `intent/<handle>` → ensure PR). Node still needs installing on the VM.
+- **Reads are backend-free.** The client fetches `open.yml` from `raw.githubusercontent.com` for both
+  `main` (base) and the user's `intent/<handle>` branch (raw serves `ACAO: *`, so no CORS issue), plus
+  a `localStorage` cache of the last save (covers raw's ~5-min CDN lag). On load it does a **three-way,
+  per-concept reconcile** (base ↔ branch ↔ local) over the slug-keyed map — same-slug changes on both
+  sides surface as conflicts.
+- **Data repo = public `dginev/mathml-intent-open`**, **single `open.yml`** (fetched whole, rendered
+  lazily, rewritten whole). Revisit splitting if conflicts become real.
 - **TeX round-trip: store both, MathML canonical.** Implemented — `Concept.tex` holds the primary
-  notation's source so re-edits reopen it (`NotationEditor initialTex`); seed entries lack `tex` and
-  re-author from blank.
+  notation's source so re-edits reopen it; seed entries lack `tex` and re-author from blank.
+- **Hosting: app on GitHub Pages** (Actions deploy; `BASE_PATH=/<repo>/`).
 
-### Deprecated spike
-
-`svelte-deprecated-experiment/` is a throwaway SvelteKit exploration kept for reference only. It has its
-own `package.json`/lint config and is excluded from root ESLint. Don't build on it.
+**Status:** the current `src/github/` (session/submit/repo/octokitBackend/auth) implements the *old*
+browser-pushes-with-user-token model and is being migrated to the above — much of the commit/PR logic
+moves into the Fastify service (it can reuse `submit.ts`/`session.ts`/`repo.ts` ideas with the bot
+token). `auth.fetchHandle` and the OAuth client helpers carry over. Not yet built: the Fastify service,
+the raw-read + reconcile data layer, the identity edit-gate, and the Pages deploy workflow.
