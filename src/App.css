@@ -61,6 +61,17 @@
   cursor: progress;
 }
 
+.theme-btn {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: inherit;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
 .spinner {
   width: 0.8em;
   height: 0.8em;
@@ -80,7 +91,7 @@
   padding: 1rem;
 }
 .error {
-  color: #c0392b;
+  color: var(--danger-text);
 }
 
 .conflicts {
@@ -88,15 +99,9 @@
   margin: 0;
   padding: 0.5rem 1rem;
   font-size: 0.85rem;
-  background: #fff4e5;
-  color: #663c00;
+  background: var(--warning-bg);
+  color: var(--warning-text);
   border-bottom: 1px solid var(--border);
-}
-@media (prefers-color-scheme: dark) {
-  .conflicts {
-    background: #3a2e1a;
-    color: #f0d8b0;
-  }
 }
 
 /* ---- virtualized table ---- */
@@ -238,7 +243,7 @@
 .notation-editor button[data-testid='save']:not(:disabled) {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
 }
 
 .notation-editor button:disabled {

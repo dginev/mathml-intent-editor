@@ -32,6 +32,13 @@ const DEV_MULTIPLIER = 10;
 /** Rows fetched per page — the initial load and each page-down increment (~a couple of viewports). */
 const PAGE = 50;
 
+const THEME_KEY = 'intent-editor.theme';
+type Theme = 'light' | 'dark';
+/** Current theme — the inline script in index.html already set `data-theme` (saved or OS preference). */
+function currentTheme(): Theme {
+  return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+}
+
 export default function App() {
   const [source, setSource] = useState<ConceptSource | null>(null);
   const [rows, setRows] = useState<Concept[]>([]); // loaded prefix of the full list
@@ -134,6 +141,20 @@ export default function App() {
     setSubmitState(null);
   }, []);
 
+  const [theme, setTheme] = useState<Theme>(currentTheme);
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try {
+        localStorage.setItem(THEME_KEY, next);
+      } catch {
+        /* ignore storage errors */
+      }
+      return next;
+    });
+  }, []);
+
   // Editing requires a signed-in identity only when a service is configured.
   const openEditor = useCallback(
     (concept: Concept) => {
@@ -216,6 +237,15 @@ export default function App() {
                 Sign in with GitHub
               </button>
             ))}
+          <button
+            type="button"
+            className="theme-btn"
+            onClick={toggleTheme}
+            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
         </div>
       </header>
 
