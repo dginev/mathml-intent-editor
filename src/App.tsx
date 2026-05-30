@@ -1,5 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createSeedSource, type ConceptSource } from './data/source';
+import { createSeedSource, createSource, type ConceptSource } from './data/source';
+import { loadDictionary } from './data/loadDictionary';
+import { loadEdits, recordEdit } from './data/editCache';
 import { ConceptTable } from './components/ConceptTable';
 import type { SavedNotation } from './components/NotationEditor';
 import {
@@ -36,6 +38,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
   const [editing, setEditing] = useState<Concept | null>(null);
+  const [conflicts, setConflicts] = useState<string[]>([]);
   const loadingRef = useRef(false);
 
   // Branch-tracked session (persisted locally).
@@ -85,9 +88,22 @@ export default function App() {
   const total = source?.total ?? 0;
 
   useEffect(() => {
-    createSeedSource(DEV_MULTIPLIER)
-      .then(setSource)
-      .catch((e) => setError(String(e)));
+    const config = repoConfigFromEnv();
+    if (config) {
+      // Production: read open.yml from GitHub (raw CDN) and reconcile with local edits client-side.
+      // (handle is null until the identity gate lands; for now this reads base + local edits.)
+      loadDictionary({ ...config, handle: null, edits: loadEdits(localStorage) })
+        .then(({ concepts, conflicts }) => {
+          setSource(createSource(concepts));
+          setConflicts(conflicts);
+        })
+        .catch((e) => setError(String(e)));
+    } else {
+      // Dev/e2e: the seed ×N, to exercise the table at the 10k-row target without a backing repo.
+      createSeedSource(DEV_MULTIPLIER)
+        .then(setSource)
+        .catch((e) => setError(String(e)));
+    }
   }, []);
 
   // Page the next chunk in on demand; guarded so overlapping scroll events don't double-fetch.
@@ -119,6 +135,9 @@ export default function App() {
       setRows((prev) =>
         prev.map((c) => (c.slug === slug ? { ...c, mathml, tex: notation.tex } : c)),
       ); // displayed
+      // Persist the edit locally so a reload restores it (reconciled on next load). `editing` is the
+      // pre-edit value → captured as the fork ancestor on the first edit of this concept.
+      if (repoConfigFromEnv()) recordEdit(localStorage, { ...editing, mathml, tex: notation.tex }, editing);
       setEditing(null);
 
       // Commit to the session branch and open/update the PR (when GitHub is configured).
@@ -178,6 +197,14 @@ export default function App() {
             ))}
         </div>
       </header>
+
+      {conflicts.length > 0 && (
+        <p className="conflicts" role="status" data-testid="conflicts">
+          {conflicts.length} concept{conflicts.length > 1 ? 's' : ''} changed upstream while you were
+          editing — review: {conflicts.slice(0, 6).join(', ')}
+          {conflicts.length > 6 ? '…' : ''}
+        </p>
+      )}
 
       <div className="body">
         {error && <p className="error">{error}</p>}
