@@ -1,13 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   buildAuthorizeUrl,
+  clearIdentity,
   consumeState,
-  exchangeCodeForToken,
-  fetchHandle,
-  loadToken,
+  exchangeCodeForIdentity,
+  loadIdentity,
   parseCallback,
   rememberState,
-  saveToken,
+  saveIdentity,
+  type Identity,
 } from './auth';
 
 const fakeStorage = (): Storage => {
@@ -25,23 +26,20 @@ const fakeStorage = (): Storage => {
 };
 
 describe('buildAuthorizeUrl', () => {
-  it('targets GitHub with client id, redirect, scope and state', () => {
-    const url = new URL(buildAuthorizeUrl('CID', 'https://app.example/cb', 'st8', 'public_repo'));
+  it('targets GitHub with client id, redirect and state (no scope for a GitHub App)', () => {
+    const url = new URL(buildAuthorizeUrl('CID', 'https://app.example/cb', 'st8'));
     expect(url.origin + url.pathname).toBe('https://github.com/login/oauth/authorize');
     expect(url.searchParams.get('client_id')).toBe('CID');
     expect(url.searchParams.get('redirect_uri')).toBe('https://app.example/cb');
-    expect(url.searchParams.get('scope')).toBe('public_repo');
     expect(url.searchParams.get('state')).toBe('st8');
+    expect(url.searchParams.has('scope')).toBe(false);
   });
 });
 
 describe('parseCallback', () => {
-  it('extracts code and state', () => {
+  it('extracts code and state, or null', () => {
     expect(parseCallback('?code=abc&state=xyz')).toEqual({ code: 'abc', state: 'xyz' });
-  });
-  it('returns null without a code', () => {
     expect(parseCallback('?error=access_denied')).toBeNull();
-    expect(parseCallback('')).toBeNull();
   });
 });
 
@@ -50,56 +48,41 @@ describe('state round-trip (CSRF)', () => {
     const s = fakeStorage();
     rememberState(s, 'st8');
     expect(consumeState(s)).toBe('st8');
-    expect(consumeState(s)).toBeNull(); // single-use
+    expect(consumeState(s)).toBeNull();
   });
 });
 
-describe('exchangeCodeForToken', () => {
-  it('POSTs the code to the proxy and returns the token', async () => {
+describe('exchangeCodeForIdentity', () => {
+  it('POSTs the code to /auth and returns { handle, jwt }', async () => {
     const fetchImpl = vi.fn(async () => ({
       ok: true,
       status: 200,
-      json: async () => ({ access_token: 'gho_x' }),
+      json: async () => ({ handle: 'dginev', jwt: 'jwt123' }),
     })) as unknown as typeof fetch;
-    const token = await exchangeCodeForToken('https://proxy.example/token', 'code1', fetchImpl);
-    expect(token).toBe('gho_x');
+    const id = await exchangeCodeForIdentity('https://svc.example', 'code1', fetchImpl);
+    expect(id).toEqual({ handle: 'dginev', jwt: 'jwt123' });
     expect(fetchImpl).toHaveBeenCalledWith(
-      'https://proxy.example/token',
+      'https://svc.example/auth',
       expect.objectContaining({ method: 'POST' }),
     );
   });
 
-  it('throws when the proxy fails or omits the token', async () => {
-    const bad = (async () => ({ ok: false, status: 500, json: async () => ({}) })) as unknown as typeof fetch;
-    await expect(exchangeCodeForToken('p', 'c', bad)).rejects.toThrow();
-    const noToken = (async () => ({ ok: true, status: 200, json: async () => ({}) })) as unknown as typeof fetch;
-    await expect(exchangeCodeForToken('p', 'c', noToken)).rejects.toThrow();
-  });
-});
-
-describe('fetchHandle', () => {
-  it('resolves the authenticated user login from the token', async () => {
-    const fetchImpl = vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({ login: 'dginev' }),
-    })) as unknown as typeof fetch;
-    expect(await fetchHandle('gho_x', fetchImpl)).toBe('dginev');
-  });
-
-  it('throws when the user request fails or has no login', async () => {
+  it('throws when the service errors or omits fields', async () => {
     const bad = (async () => ({ ok: false, status: 401, json: async () => ({}) })) as unknown as typeof fetch;
-    await expect(fetchHandle('t', bad)).rejects.toThrow();
-    const noLogin = (async () => ({ ok: true, status: 200, json: async () => ({}) })) as unknown as typeof fetch;
-    await expect(fetchHandle('t', noLogin)).rejects.toThrow();
+    await expect(exchangeCodeForIdentity('s', 'c', bad)).rejects.toThrow();
+    const partial = (async () => ({ ok: true, status: 200, json: async () => ({ handle: 'x' }) })) as unknown as typeof fetch;
+    await expect(exchangeCodeForIdentity('s', 'c', partial)).rejects.toThrow();
   });
 });
 
-describe('token storage', () => {
-  it('saves and loads the token', () => {
+describe('identity storage', () => {
+  it('saves, loads and clears the identity', () => {
     const s = fakeStorage();
-    expect(loadToken(s)).toBeNull();
-    saveToken(s, 'gho_x');
-    expect(loadToken(s)).toBe('gho_x');
+    const id: Identity = { handle: 'dginev', jwt: 'jwt123' };
+    expect(loadIdentity(s)).toBeNull();
+    saveIdentity(s, id);
+    expect(loadIdentity(s)).toEqual(id);
+    clearIdentity(s);
+    expect(loadIdentity(s)).toBeNull();
   });
 });

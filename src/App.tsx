@@ -6,19 +6,18 @@ import { ConceptTable } from './components/ConceptTable';
 import type { SavedNotation } from './components/NotationEditor';
 import {
   buildAuthorizeUrl,
-  clearToken,
+  clearIdentity,
   consumeState,
-  exchangeCodeForToken,
-  loadToken,
+  exchangeCodeForIdentity,
+  loadIdentity,
   parseCallback,
   randomState,
   rememberState,
-  saveToken,
+  saveIdentity,
+  type Identity,
 } from './github/auth';
-import { oauthConfigFromEnv, repoConfigFromEnv, tokenFromEnv } from './github/config';
-import { createOctokitBackend } from './github/octokitBackend';
-import { branchName, loadSession, saveSession } from './github/session';
-import { refreshSession, submitEdit } from './github/submit';
+import { repoConfigFromEnv, serviceConfigFromEnv } from './github/config';
+import { submitToService } from './github/submitClient';
 import type { Concept } from './types';
 import './App.css';
 
@@ -41,70 +40,57 @@ export default function App() {
   const [conflicts, setConflicts] = useState<string[]>([]);
   const loadingRef = useRef(false);
 
-  // Branch-tracked session (persisted locally).
-  const [session, setSession] = useState(() => loadSession(localStorage, () => crypto.randomUUID()));
+  // Config: backing repo (raw reads) and the auth+PR service. Either may be absent → graceful fallback.
+  const repo = useMemo(() => repoConfigFromEnv(), []);
+  const service = useMemo(() => serviceConfigFromEnv(), []);
+
+  // Identity: a verified @handle + JWT from the service's /auth. Required to edit when a service is
+  // configured; without a service the app is local-only (no gate, no PRs).
+  const [identity, setIdentity] = useState<Identity | null>(() => loadIdentity(localStorage));
   const [submitState, setSubmitState] = useState<string | null>(null);
+  const handle = identity?.handle ?? null;
 
-  // Auth: a GitHub token comes from OAuth sign-in (stored) or VITE_GH_TOKEN (dev). The backend (and
-  // thus PR submission) is built only when both a token and repo config are present.
-  const oauth = useMemo(() => oauthConfigFromEnv(), []);
-  const [token, setToken] = useState<string | null>(() => loadToken(localStorage) ?? tokenFromEnv());
-  const backend = useMemo(() => {
-    const config = repoConfigFromEnv();
-    return config && token ? createOctokitBackend(token, config) : null;
-  }, [token]);
-
-  // Complete the OAuth redirect (?code=…&state=…) once on load: verify state, exchange via the proxy.
+  // Complete the OAuth redirect (?code=…&state=…): verify state, exchange via /auth, store identity.
   useEffect(() => {
-    if (!oauth) return;
+    if (!service) return;
     const cb = parseCallback(window.location.search);
     if (!cb) return;
     const cleanUrl = window.location.origin + window.location.pathname;
     const valid = cb.state === consumeState(localStorage);
     window.history.replaceState(null, '', cleanUrl);
-    // State updates happen in the async continuations below (never synchronously in this effect).
     void (valid
-      ? exchangeCodeForToken(oauth.proxyUrl, cb.code).then((t) => {
-          saveToken(localStorage, t);
-          setToken(t);
+      ? exchangeCodeForIdentity(service.serviceUrl, cb.code).then((id) => {
+          saveIdentity(localStorage, id);
+          setIdentity(id);
         })
       : Promise.reject(new Error('state mismatch'))
     ).catch((e) => setSubmitState(`Sign-in failed: ${e instanceof Error ? e.message : String(e)}`));
-  }, [oauth]);
+  }, [service]);
 
-  const signIn = useCallback(() => {
-    if (!oauth) return;
-    const state = randomState();
-    rememberState(localStorage, state);
-    const redirectUri = window.location.origin + window.location.pathname;
-    window.location.assign(buildAuthorizeUrl(oauth.clientId, redirectUri, state, oauth.scope));
-  }, [oauth]);
-
-  const signOut = useCallback(() => {
-    clearToken(localStorage);
-    setToken(tokenFromEnv());
-  }, []);
+  // Load the dictionary. Reloads when the signed-in handle changes (to read the user's branch).
+  useEffect(() => {
+    let live = true;
+    const done = (s: ConceptSource, c: string[] = []) => {
+      if (!live) return;
+      setRows([]);
+      setSource(s);
+      setConflicts(c);
+    };
+    if (repo) {
+      loadDictionary({ ...repo, handle, edits: loadEdits(localStorage) })
+        .then(({ concepts, conflicts }) => done(createSource(concepts), conflicts))
+        .catch((e) => live && setError(String(e)));
+    } else {
+      createSeedSource(DEV_MULTIPLIER)
+        .then((s) => done(s))
+        .catch((e) => live && setError(String(e)));
+    }
+    return () => {
+      live = false;
+    };
+  }, [repo, handle]);
 
   const total = source?.total ?? 0;
-
-  useEffect(() => {
-    const config = repoConfigFromEnv();
-    if (config) {
-      // Production: read open.yml from GitHub (raw CDN) and reconcile with local edits client-side.
-      // (handle is null until the identity gate lands; for now this reads base + local edits.)
-      loadDictionary({ ...config, handle: null, edits: loadEdits(localStorage) })
-        .then(({ concepts, conflicts }) => {
-          setSource(createSource(concepts));
-          setConflicts(conflicts);
-        })
-        .catch((e) => setError(String(e)));
-    } else {
-      // Dev/e2e: the seed ×N, to exercise the table at the 10k-row target without a backing repo.
-      createSeedSource(DEV_MULTIPLIER)
-        .then(setSource)
-        .catch((e) => setError(String(e)));
-    }
-  }, []);
 
   // Page the next chunk in on demand; guarded so overlapping scroll events don't double-fetch.
   const loadMore = useCallback(async () => {
@@ -120,47 +106,65 @@ export default function App() {
     }
   }, [source, rows.length]);
 
-  // Load the first page (a couple of viewports) once the source is ready.
+  // Load the first page once a (new) source is ready.
   useEffect(() => {
     if (source) void loadMore();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source]);
+
+  const signIn = useCallback(() => {
+    if (!service) return;
+    const state = randomState();
+    rememberState(localStorage, state);
+    const redirectUri = window.location.origin + window.location.pathname;
+    window.location.assign(buildAuthorizeUrl(service.clientId, redirectUri, state));
+  }, [service]);
+
+  const signOut = useCallback(() => {
+    clearIdentity(localStorage);
+    setIdentity(null);
+    setSubmitState(null);
+  }, []);
+
+  // Editing requires a signed-in identity only when a service is configured.
+  const openEditor = useCallback(
+    (concept: Concept) => {
+      if (service && !identity) {
+        setSubmitState('Sign in with GitHub to suggest edits.');
+        return;
+      }
+      setEditing(concept);
+    },
+    [service, identity],
+  );
 
   const handleSave = useCallback(
     (notation: SavedNotation) => {
       if (!editing || !source) return;
       const slug = editing.slug;
       const mathml = [notation.mathml, ...editing.mathml.slice(1)];
-      source.applyEdit(slug, mathml, notation.tex); // canonical (full dataset, used for the PR file)
-      setRows((prev) =>
-        prev.map((c) => (c.slug === slug ? { ...c, mathml, tex: notation.tex } : c)),
-      ); // displayed
-      // Persist the edit locally so a reload restores it (reconciled on next load). `editing` is the
-      // pre-edit value → captured as the fork ancestor on the first edit of this concept.
-      if (repoConfigFromEnv()) recordEdit(localStorage, { ...editing, mathml, tex: notation.tex }, editing);
+      source.applyEdit(slug, mathml, notation.tex); // canonical full dataset (used for the PR file)
+      setRows((prev) => prev.map((c) => (c.slug === slug ? { ...c, mathml, tex: notation.tex } : c)));
+      if (repo) recordEdit(localStorage, { ...editing, mathml, tex: notation.tex }, editing); // reload-safe
       setEditing(null);
 
-      // Commit to the session branch and open/update the PR (when GitHub is configured).
-      if (!backend) return;
+      // Submit to the service: the bot commits to intent/<handle> and opens/updates the PR.
+      if (!service || !identity) return;
       void (async () => {
         try {
           setSubmitState('Submitting…');
-          const refreshed = await refreshSession(backend, session);
-          const next = await submitEdit(
-            backend,
-            refreshed,
-            source.serialize(),
-            `Update notation for ${slug}`,
-          );
-          saveSession(localStorage, next);
-          setSession(next);
-          setSubmitState(`PR #${next.prNumber} · ${branchName(next)}`);
+          const { prNumber, prUrl } = await submitToService(service.serviceUrl, identity.jwt, {
+            content: source.serialize(),
+            message: `Update notation for ${slug} (proposed by @${identity.handle})`,
+          });
+          setSubmitState(`PR #${prNumber}`);
+          window.open(prUrl, '_blank', 'noopener');
         } catch (e) {
           setSubmitState(`Submit failed: ${e instanceof Error ? e.message : String(e)}`);
         }
       })();
     },
-    [editing, source, backend, session],
+    [editing, source, service, identity, repo],
   );
 
   return (
@@ -179,16 +183,16 @@ export default function App() {
             {source && rows.length < total ? ` · ${rows.length.toLocaleString()} loaded` : ''}
           </span>
           <span className="session-status">
-            {backend
-              ? (submitState ?? `branch ${branchName(session)}`)
-              : oauth
-                ? 'Sign in to submit changes'
-                : 'GitHub not configured — local only'}
+            {!service
+              ? 'GitHub not configured — local only'
+              : identity
+                ? (submitState ?? `signed in as @${identity.handle}`)
+                : 'Sign in to contribute'}
           </span>
-          {oauth &&
-            (token ? (
+          {service &&
+            (identity ? (
               <button type="button" className="auth-btn" onClick={signOut}>
-                Sign out
+                Sign out (@{identity.handle})
               </button>
             ) : (
               <button type="button" className="auth-btn" onClick={signIn}>
@@ -214,7 +218,7 @@ export default function App() {
             data={rows}
             total={total}
             filter={filter}
-            onSelect={setEditing}
+            onSelect={openEditor}
             onLoadMore={loadMore}
           />
         )}
