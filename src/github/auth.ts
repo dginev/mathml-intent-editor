@@ -1,23 +1,21 @@
 /**
- * Client side of GitHub OAuth (web flow). Each contributor signs in with their own GitHub account so
- * PRs are attributed to them. GitHub's token exchange needs a client secret, so the `code → token`
- * step goes through a small server-side proxy (see `exchangeCodeForToken`); everything else is here.
+ * Client side of GitHub sign-in. The user authorizes our GitHub App; the redirect `code` is exchanged
+ * by our service (`/auth`) for a verified `@handle` + a signed identity JWT. The JWT is the badge the
+ * browser presents to `/submit`. (The GitHub App's client secret + bot key live only on the service.)
  */
-const TOKEN_KEY = 'intent-editor.gh-token';
+const IDENTITY_KEY = 'intent-editor.identity';
 const STATE_KEY = 'intent-editor.oauth-state';
 const GITHUB_AUTHORIZE = 'https://github.com/login/oauth/authorize';
 
-export function buildAuthorizeUrl(
-  clientId: string,
-  redirectUri: string,
-  state: string,
-  scope = 'public_repo',
-): string {
-  const params = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, scope, state });
+export type Identity = { handle: string; jwt: string };
+
+/** GitHub App user-authorization URL. (Apps take no `scope` — permissions are fixed on the App.) */
+export function buildAuthorizeUrl(clientId: string, redirectUri: string, state: string): string {
+  const params = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, state });
   return `${GITHUB_AUTHORIZE}?${params}`;
 }
 
-/** Parse the OAuth redirect query string into `{ code, state }`, or null if there's no code. */
+/** Parse the OAuth redirect query into `{ code, state }`, or null if there's no code. */
 export function parseCallback(search: string): { code: string; state: string } | null {
   const params = new URLSearchParams(search);
   const code = params.get('code');
@@ -25,7 +23,6 @@ export function parseCallback(search: string): { code: string; state: string } |
   return code && state ? { code, state } : null;
 }
 
-/** A random opaque CSRF state value. */
 export function randomState(): string {
   return crypto.randomUUID();
 }
@@ -41,46 +38,38 @@ export function consumeState(storage: Storage): string | null {
   return state;
 }
 
-/** Exchange the OAuth `code` for an access token via the server-side proxy. */
-export async function exchangeCodeForToken(
-  proxyUrl: string,
+/** Exchange the OAuth `code` at the service's `/auth` for a verified identity (handle + JWT). */
+export async function exchangeCodeForIdentity(
+  serviceUrl: string,
   code: string,
   fetchImpl: typeof fetch = fetch,
-): Promise<string> {
-  const res = await fetchImpl(proxyUrl, {
+): Promise<Identity> {
+  const res = await fetchImpl(`${serviceUrl}/auth`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ code }),
   });
-  if (!res.ok) throw new Error(`Token exchange failed: ${res.status}`);
-  const data = (await res.json()) as { access_token?: string };
-  if (!data.access_token) throw new Error('Token exchange response had no access_token');
-  return data.access_token;
+  if (!res.ok) throw new Error(`Sign-in failed: ${res.status}`);
+  const data = (await res.json()) as Partial<Identity>;
+  if (!data.jwt || !data.handle) throw new Error('Auth response missing jwt/handle');
+  return { handle: data.handle, jwt: data.jwt };
 }
 
-/**
- * Resolve the authenticated user's GitHub handle (login). Identity is a prerequisite for editing —
- * we record who is suggesting a change, even though the PR itself is opened by our controlled account.
- * (`api.github.com` is CORS-enabled, so this works from the browser.)
- */
-export async function fetchHandle(token: string, fetchImpl: typeof fetch = fetch): Promise<string> {
-  const res = await fetchImpl('https://api.github.com/user', {
-    headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json' },
-  });
-  if (!res.ok) throw new Error(`Failed to resolve GitHub user: ${res.status}`);
-  const data = (await res.json()) as { login?: string };
-  if (!data.login) throw new Error('GitHub user response had no login');
-  return data.login;
+export function saveIdentity(storage: Storage, identity: Identity): void {
+  storage.setItem(IDENTITY_KEY, JSON.stringify(identity));
 }
 
-export function saveToken(storage: Storage, token: string): void {
-  storage.setItem(TOKEN_KEY, token);
+export function loadIdentity(storage: Storage): Identity | null {
+  const raw = storage.getItem(IDENTITY_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Identity;
+    return parsed && parsed.handle && parsed.jwt ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
-export function loadToken(storage: Storage): string | null {
-  return storage.getItem(TOKEN_KEY);
-}
-
-export function clearToken(storage: Storage): void {
-  storage.removeItem(TOKEN_KEY);
+export function clearIdentity(storage: Storage): void {
+  storage.removeItem(IDENTITY_KEY);
 }

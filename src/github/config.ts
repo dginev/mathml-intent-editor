@@ -1,11 +1,15 @@
-import type { RepoConfig } from './repo';
+/** The public backing repo + the file within it that holds the dictionary. */
+export type RepoConfig = { owner: string; repo: string; baseBranch: string; filePath: string };
 
 /**
- * Backing-repo configuration + auth, from Vite env vars (`.env.local`):
+ * Configuration from Vite env vars (set in `.env.local` for dev, or the Pages build):
  *   VITE_GH_OWNER, VITE_GH_REPO, VITE_GH_BASE (default "main"), VITE_GH_FILE (default "open.yml")
- *   VITE_GH_TOKEN — a token for dev. In production this is replaced by the anonymous OAuth flow
- *   (see auth.ts, TODO). Returns null when the integration isn't configured, so the app falls back
- *   to local-only edits.
+ *     — the public backing repo, read directly from raw.githubusercontent.
+ *   VITE_GH_CLIENT_ID  — the GitHub App's client id (public).
+ *   VITE_GH_SERVICE    — base URL of the auth+PR service (e.g. https://intent-api.latexml.rs).
+ *
+ * Each `*FromEnv()` returns null when unset, so the app degrades gracefully: no repo config → seed
+ * fallback (dev/e2e); no service config → editing stays local-only (no sign-in gate, no PRs).
  */
 const env = import.meta.env as unknown as Record<string, string | undefined>;
 
@@ -21,19 +25,11 @@ export function repoConfigFromEnv(): RepoConfig | null {
   };
 }
 
-export function tokenFromEnv(): string | null {
-  return env.VITE_GH_TOKEN ?? null;
-}
+export type ServiceConfig = { clientId: string; serviceUrl: string };
 
-export type OAuthConfig = { clientId: string; proxyUrl: string; scope: string };
-
-/**
- * GitHub OAuth config from env: VITE_GH_CLIENT_ID, VITE_GH_OAUTH_PROXY (the token-exchange proxy
- * endpoint), VITE_GH_SCOPE (default "public_repo"). Null when sign-in isn't configured.
- */
-export function oauthConfigFromEnv(): OAuthConfig | null {
+export function serviceConfigFromEnv(): ServiceConfig | null {
   const clientId = env.VITE_GH_CLIENT_ID;
-  const proxyUrl = env.VITE_GH_OAUTH_PROXY;
-  if (!clientId || !proxyUrl) return null;
-  return { clientId, proxyUrl, scope: env.VITE_GH_SCOPE ?? 'public_repo' };
+  const serviceUrl = env.VITE_GH_SERVICE;
+  if (!clientId || !serviceUrl) return null;
+  return { clientId, serviceUrl: serviceUrl.replace(/\/+$/, '') };
 }

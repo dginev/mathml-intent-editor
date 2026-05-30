@@ -179,23 +179,29 @@ the complex-argument operator) — use `\operatorname{arg}` for that. Rebuild th
 then in the app `npm install temml@file:../Temml` (npm caches `file:` deps — bump the fork version or
 force-reinstall, do **not** symlink: Vite-following a symlink can load Temml twice).
 
-## GitHub backing (`src/github/`)
+## GitHub integration (`src/github/`)
 
-- `session.ts` — anonymous, branch-tracked session (persisted in `localStorage`): a session owns
-  `intent/<id>` (branch), the first edit opens a PR, later edits push onto the same branch, and
-  `rotateAfterMerge` moves to `intent/<id>-2` after the PR merges. Pure + unit-tested.
-- `submit.ts` — orchestration: `submitEdit` (commit → open PR on first edit / reuse on later) and
-  `refreshSession` (rotate when the tracked PR merged). Unit-tested against a mock backend.
-- `repo.ts` — `RepoBackend` interface + `RepoConfig`. `octokitBackend.ts` — Octokit implementation.
-- `auth.ts` — client side of GitHub OAuth: `buildAuthorizeUrl`, `parseCallback`, CSRF `state`
-  remember/consume, `exchangeCodeForToken` (POSTs to the proxy), token storage. Unit-tested.
-- `config.ts` — env: `VITE_GH_OWNER`/`VITE_GH_REPO`/`VITE_GH_BASE`/`VITE_GH_FILE`, dev `VITE_GH_TOKEN`,
-  and OAuth `VITE_GH_CLIENT_ID`/`VITE_GH_OAUTH_PROXY`/`VITE_GH_SCOPE`. Each `*FromEnv()` returns null
-  when unset → app degrades to local-only (so tests/preview run without GitHub).
-- `src/data/serialize.ts` — concepts → seed `open.yml` (inverse of `loadSeed`); used to build PR content.
+The browser holds **no** GitHub token. It signs the user in (to get a `@handle`) and sends edits to the
+service; the **bot** (in `service/`) does all the writing. The old browser-push modules
+(`session.ts`/`submit.ts`/`repo.ts`/`octokitBackend.ts`) were removed — that logic now lives server-side
+in `service/src/github.js`.
 
-`App` loads/persists the session, builds the backend from env, and on Save commits + opens/updates the
-PR when configured. Dev uses `VITE_GH_TOKEN`.
+- `auth.ts` — sign-in client: `buildAuthorizeUrl` (GitHub App user OAuth, no scope), `parseCallback`,
+  CSRF `state` helpers, `exchangeCodeForIdentity(serviceUrl, code)` → `{ handle, jwt }` (POSTs
+  `/auth`), and identity storage (`save/load/clearIdentity`). Unit-tested.
+- `submitClient.ts` — `submitToService(serviceUrl, jwt, { content, message })` → POSTs `/submit`
+  (Bearer JWT) → `{ prNumber, prUrl }`. Unit-tested.
+- `config.ts` — `repoConfigFromEnv()` (`VITE_GH_OWNER`/`REPO`/`BASE`/`FILE`) and
+  `serviceConfigFromEnv()` (`VITE_GH_CLIENT_ID`, `VITE_GH_SERVICE`). Either returns null → graceful
+  fallback (no repo → seed fixture; no service → local-only, ungated editing). See `.env.example`.
+- `src/data/serialize.ts` — concepts → `open.yml` (the content sent to `/submit`).
+
+`App` flow: **sign in** (`/auth` → store `{handle, jwt}`) gates editing when a service is configured;
+**Save** → `submitToService` (bot commits to `intent/<handle>` + opens/updates the PR) and opens the PR
+link. Signing in reloads the dictionary with the user's branch (`handle` dep on the load effect).
+
+The service itself is in **`service/`** (Fastify, deployed on `latexml.rs` behind Caddy at
+`https://intent-api.latexml.rs`) — see `service/README.md`.
 
 ### Architecture (confirmed with the user — target design)
 
@@ -209,7 +215,7 @@ The earlier "user opens the PR with their own token" model was replaced. The agr
 - **Backend = a Node/Fastify microservice on the `latexml.rs` VM**, behind the VM's existing **Caddy**
   (auto-HTTPS + CORS for the Pages origin). Stateless **JWT** sessions (no session store). Endpoints:
   `/auth` (OAuth code → verified handle → JWT) and `/submit` (verify JWT → bot commits to
-  `intent/<handle>` → ensure PR). Node still needs installing on the VM.
+  `intent/<handle>` → ensure PR). **Deployed and verified** at `https://intent-api.latexml.rs`.
 - **Reads are backend-free.** The client fetches `open.yml` from `raw.githubusercontent.com` for both
   `main` (base) and the user's `intent/<handle>` branch (raw serves `ACAO: *`, so no CORS issue), plus
   a `localStorage` cache of the last save (covers raw's ~5-min CDN lag). On load it does a **three-way,
@@ -221,8 +227,8 @@ The earlier "user opens the PR with their own token" model was replaced. The agr
   notation's source so re-edits reopen it; seed entries lack `tex` and re-author from blank.
 - **Hosting: app on GitHub Pages** (Actions deploy; `BASE_PATH=/<repo>/`).
 
-**Status:** the current `src/github/` (session/submit/repo/octokitBackend/auth) implements the *old*
-browser-pushes-with-user-token model and is being migrated to the above — much of the commit/PR logic
-moves into the Fastify service (it can reuse `submit.ts`/`session.ts`/`repo.ts` ideas with the bot
-token). `auth.fetchHandle` and the OAuth client helpers carry over. Not yet built: the Fastify service,
-the raw-read + reconcile data layer, the identity edit-gate, and the Pages deploy workflow.
+**Status:** built and wired end-to-end — raw-read + three-way reconcile data layer, the Fastify service
+(deployed on `latexml.rs`), the identity edit-gate, sign-in → `/auth`, and Save → `/submit`. The
+browser-push modules were removed. **Remaining:** the GitHub Pages deploy workflow (set the
+`VITE_GH_*` env at build), and an end-to-end live test of a real sign-in + PR. The three-way reconcile
+becomes fully exercised once users have `intent/<handle>` branches.
