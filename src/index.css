@@ -1,37 +1,90 @@
-:root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --surface: #faf9f7;
-  --hover: rgba(170, 59, 255, 0.06);
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
+/*
+ * Design tokens. Semantic color variables in two themes (light default / dark), chosen for WCAG-AA
+ * contrast. Theme is selected by `data-theme` on <html> (set pre-render by an inline script in
+ * index.html, toggled at runtime in App). When no explicit theme is set we follow the OS preference.
+ * Every color in the app references a token — no raw hex in component CSS.
+ */
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #f5f6f8;
+  --surface-2: #e9ebef;
+  --text: #16191d; /* ~16:1 on --bg */
+  --text-muted: #545a62; /* ~7:1 on --bg */
+  --border: #ccd1d8;
+  --accent: #6d28d9;
+  --accent-text: #ffffff; /* ~5.9:1 on --accent */
+  --accent-hover: #5b21b6;
+  --hover: rgba(109, 40, 217, 0.08);
+  --link: #1d4ed8; /* ~7:1 on --bg */
+  --focus: #6d28d9;
+  --danger-bg: #fdecea;
+  --danger-text: #a31c12; /* ~6:1 on --bg */
+  --warning-bg: #fff4e5;
+  --warning-text: #7a4d00; /* ~7:1 on --warning-bg */
+  --code-bg: #e9ebef;
+  --code-text: #16191d;
+}
 
+[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #14161b;
+  --surface: #1d2026;
+  --surface-2: #2a2e37;
+  --text: #eaecef; /* ~15:1 on --bg */
+  --text-muted: #a6adb6; /* ~8:1 on --bg */
+  --border: #353b45;
+  --accent: #8b5cf6;
+  --accent-text: #14161b; /* ~7:1 on --accent */
+  --accent-hover: #a78bfa;
+  --hover: rgba(139, 92, 246, 0.16);
+  --link: #93c5fd; /* ~10:1 on --bg */
+  --focus: #a78bfa;
+  --danger-bg: #3a201e;
+  --danger-text: #ff9d92;
+  --warning-bg: #3a2e1a;
+  --warning-text: #f0d8b0;
+  --code-bg: #2a2e37;
+  --code-text: #eaecef;
+}
+
+/* Follow the OS preference only when no explicit theme has been chosen. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --bg: #14161b;
+    --surface: #1d2026;
+    --surface-2: #2a2e37;
+    --text: #eaecef;
+    --text-muted: #a6adb6;
+    --border: #353b45;
+    --accent: #8b5cf6;
+    --accent-text: #14161b;
+    --accent-hover: #a78bfa;
+    --hover: rgba(139, 92, 246, 0.16);
+    --link: #93c5fd;
+    --focus: #a78bfa;
+    --danger-bg: #3a201e;
+    --danger-text: #ff9d92;
+    --warning-bg: #3a2e1a;
+    --warning-text: #f0d8b0;
+    --code-bg: #2a2e37;
+    --code-text: #eaecef;
+  }
+}
+
+:root {
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
 
   font: 16px/145% var(--sans);
-  color-scheme: light dark;
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --surface: #1b1c23;
-    --hover: rgba(192, 132, 252, 0.1);
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-  }
 }
 
 body {
@@ -46,13 +99,23 @@ body {
 h1 {
   font-family: var(--sans);
   font-weight: 600;
-  color: var(--text-h);
+  color: var(--text);
+}
+
+a {
+  color: var(--link);
 }
 
 code {
   font-family: var(--mono);
   border-radius: 4px;
-  color: var(--text-h);
+  color: var(--code-text);
   background: var(--code-bg);
   padding: 1px 5px;
+}
+
+/* Visible keyboard focus everywhere (accessibility). */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
