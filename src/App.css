@@ -1,0 +1,244 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+}
+
+.app-header {
+  flex: 0 0 auto;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.app-header h1 {
+  font-size: 1.1rem;
+  margin: 0 0 0.5rem;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.toolbar input[type='search'] {
+  flex: 0 1 320px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+}
+
+.toolbar .count {
+  opacity: 0.65;
+  font-size: 0.85rem;
+}
+
+.session-status {
+  margin-left: auto;
+  font-size: 0.8rem;
+  opacity: 0.6;
+}
+
+.auth-btn {
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.status,
+.error {
+  padding: 1rem;
+}
+.error {
+  color: #c0392b;
+}
+
+/* ---- virtualized table ---- */
+.table-scroll {
+  flex: 1 1 auto;
+  overflow: auto;
+  position: relative;
+}
+
+.table-inner {
+  min-width: 100%;
+}
+
+.thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  border-bottom: 2px solid var(--border);
+}
+
+.tbody {
+  position: relative;
+}
+
+.tr {
+  display: flex;
+}
+
+.tbody .tr {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  border-bottom: 1px solid var(--border);
+}
+
+.tbody .tr:hover {
+  background: var(--hover);
+}
+
+.row-clickable {
+  cursor: pointer;
+}
+
+/* ---- layout: table + editor side panel ---- */
+.body {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+
+.body .table-scroll {
+  flex: 1 1 auto;
+}
+
+.editor-panel {
+  flex: 0 0 420px;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  overflow: auto;
+  padding: 1rem;
+}
+
+/* ---- notation editor ---- */
+.notation-editor h2 {
+  font-size: 1rem;
+  margin: 0 0 1rem;
+}
+
+.notation-editor .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.notation-editor textarea {
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+  resize: vertical;
+}
+
+.preview-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1rem 0;
+  min-height: 2.5rem;
+}
+
+.preview-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+}
+
+.preview math {
+  font-size: 1.3em;
+}
+
+.hint {
+  opacity: 0.5;
+  font-style: italic;
+}
+
+.fragment-src {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 0.72rem;
+  background: var(--code-bg);
+  padding: 0.5rem;
+  border-radius: 6px;
+}
+
+.notation-editor .actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.notation-editor button {
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.notation-editor button[data-testid='save']:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.notation-editor button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.th,
+.td {
+  flex: 0 0 auto;
+  padding: 0.4rem 0.6rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.th {
+  font-weight: 600;
+  text-align: left;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  opacity: 0.7;
+}
+
+.td {
+  display: flex;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.mathml {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.mathml math {
+  font-size: 1.05em;
+}
