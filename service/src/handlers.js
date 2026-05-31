@@ -18,6 +18,18 @@ export function createHandlers(deps) {
     return e;
   };
 
+  /** Verify the Bearer JWT and run `fn(handle)`; a bad/expired token → 401. */
+  const withSession = (authorization, fn) => {
+    const jwt = (authorization || '').replace(/^Bearer\s+/i, '');
+    let handle;
+    try {
+      handle = deps.verifySession(jwt).handle;
+    } catch {
+      throw fail(401, 'invalid session');
+    }
+    return fn(handle);
+  };
+
   return {
     /** POST /auth — finish OAuth, return an identity JWT (the user token is discarded). */
     async auth(body) {
@@ -29,35 +41,22 @@ export function createHandlers(deps) {
 
     /** POST /submit — verify identity, then the bot commits + opens/updates the PR. */
     async submit({ authorization, body }) {
-      const jwt = (authorization || '').replace(/^Bearer\s+/i, '');
-      let handle;
-      try {
-        handle = deps.verifySession(jwt).handle;
-      } catch {
-        throw fail(401, 'invalid session');
-      }
-      if (!body || typeof body.content !== 'string') throw fail(400, 'missing content');
-      const message = body.message || `Update open.yml (proposed by @${handle})`;
-      return deps.submit({
-        handle,
-        content: body.content,
-        message,
-        title: body.title,
-        description: body.description,
-        branch: body.branch,
+      return withSession(authorization, (handle) => {
+        if (!body || typeof body.content !== 'string') throw fail(400, 'missing content');
+        return deps.submit({
+          handle,
+          content: body.content,
+          message: body.message || `Update open.yml (proposed by @${handle})`,
+          title: body.title,
+          description: body.description,
+          branch: body.branch,
+        });
       });
     },
 
     /** POST /reset — verify identity, then the bot deletes the caller's (closed-PR) working branch. */
     async reset({ authorization, body }) {
-      const jwt = (authorization || '').replace(/^Bearer\s+/i, '');
-      let handle;
-      try {
-        handle = deps.verifySession(jwt).handle;
-      } catch {
-        throw fail(401, 'invalid session');
-      }
-      return deps.reset({ handle, branch: body?.branch });
+      return withSession(authorization, (handle) => deps.reset({ handle, branch: body?.branch }));
     },
 
     /**
@@ -66,14 +65,7 @@ export function createHandlers(deps) {
      * so absences longer than the TTL still force a re-auth.
      */
     async renew({ authorization }) {
-      const jwt = (authorization || '').replace(/^Bearer\s+/i, '');
-      let handle;
-      try {
-        handle = deps.verifySession(jwt).handle;
-      } catch {
-        throw fail(401, 'invalid session');
-      }
-      return { jwt: deps.signSession(handle), handle };
+      return withSession(authorization, (handle) => ({ jwt: deps.signSession(handle), handle }));
     },
   };
 }

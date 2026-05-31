@@ -24,6 +24,9 @@ function setOrDelete(e: Record<string, unknown>, key: string, value: unknown): v
  *
  * The editor-authored `tex` IS written (as `tex:`) when present, so the TeX source is preserved in the
  * file and re-edits reopen it. (This adds a field to the shared file — a W3C-format change to socialize.)
+ *
+ * Adding/removing a modeled field touches four sites that must stay in sync: this writer, `parse.ts`
+ * (the reader), `reconcile.ts::contentKey` (diff identity), and `Concept` in `types.ts` (the shape).
  */
 /**
  * Deterministic canonical order, fully determined by `(concept, arity)`: ASCII (code-unit) by slug,
