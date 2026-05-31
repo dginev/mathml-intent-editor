@@ -145,11 +145,14 @@ runs without a backend. So **don't remove the seed path** — the perf e2e depen
   `applyEdit`, `serialize`). The UI knows `total` up front but pages rows in (PAGE=50 ≈ a couple of
   viewports) as the user scrolls — `App` grows a loaded prefix and `ConceptTable` calls `onLoadMore`
   near the loaded bottom. `createSeedSource` parses the seed once then slices on demand (the seed is one
-  file; a real backend would range-fetch over the network — same interface). Filtering currently acts
-  on loaded rows only (known infinite-scroll limitation; ergonomics later).
+  file; a real backend would range-fetch over the network — same interface). **Filtering searches the
+  whole dictionary**: when the filter is non-empty `App` passes `source.all()` filtered by
+  `conceptMatches` (slug/en/speech/area/alias) and shows every match **unpaged**; clearing the filter
+  resumes the paged prefix. Ctrl/⌘+F is rebound to focus the filter (native find can't see the
+  virtualized rows).
 - `src/components/ConceptTable.tsx` — headless TanStack Table + TanStack Virtual. DOM row windowing
-  with absolute-positioned rows; global filter across slug/en/area/alias. Notation column renders the
-  stored MathML via `<MathML>`.
+  with absolute-positioned rows; it renders exactly the `data` it's given (filtering happens upstream in
+  `App`). Notation column renders the stored MathML via `<MathML>`.
 - `src/render/temmlEngine.ts` — loads Temml. **Must stay this way:** it imports the prebuilt
   `temml/dist/temml.mjs?url` and `import()`s that URL so Vite emits Temml **untransformed**. Temml
   registers its ~80 commands by mutating a module-level `const _functions = {}` at import time; when

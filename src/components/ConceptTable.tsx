@@ -1,12 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import {
-  createColumnHelper,
-  flexRender,
-  getCoreRowModel,
-  getFilteredRowModel,
-  useReactTable,
-  type FilterFn,
-} from '@tanstack/react-table';
+import { createColumnHelper, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { Concept } from '../types';
 import { conceptId } from '../data/conceptId';
@@ -21,18 +14,6 @@ type TableMeta = {
   onEdit?: (c: Concept) => void;
   onDelete?: (c: Concept) => void;
   changeKind?: (c: Concept) => ChangeKind | null;
-};
-
-/** Case-insensitive substring match across slug, English template, area, and aliases. */
-const conceptFilter: FilterFn<Concept> = (row, _columnId, value) => {
-  const q = String(value).toLowerCase();
-  const c = row.original;
-  return (
-    c.slug.toLowerCase().includes(q) ||
-    (c.en?.toLowerCase().includes(q) ?? false) ||
-    (c.area?.toLowerCase().includes(q) ?? false) ||
-    c.alias.some((a) => a.toLowerCase().includes(q))
-  );
 };
 
 const columns = [
@@ -114,7 +95,6 @@ const LOAD_THRESHOLD = 20;
 export function ConceptTable({
   data,
   total,
-  filter,
   onEdit,
   onLoadMore,
   editingId,
@@ -122,11 +102,10 @@ export function ConceptTable({
   changeKind,
   headerActions,
 }: {
-  /** The rows loaded so far (a growing prefix of the full list). */
+  /** The exact rows to render (the paged prefix, or the full filtered set when a filter is active). */
   data: Concept[];
-  /** Total rows available; `data.length < total` means more can be paged in. */
+  /** Total rows available; `data.length < total` means more can be paged in (disabled while filtering). */
   total: number;
-  filter: string;
   /** Per-row edit (the ✎ button); rows themselves are not clickable. */
   onEdit?: (concept: Concept) => void;
   onLoadMore?: () => void;
@@ -142,10 +121,7 @@ export function ConceptTable({
   const table = useReactTable({
     data,
     columns,
-    state: { globalFilter: filter },
-    globalFilterFn: conceptFilter,
     getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
     meta: { onEdit, onDelete, changeKind },
   });
 
