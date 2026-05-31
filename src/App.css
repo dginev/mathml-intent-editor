@@ -291,6 +291,14 @@
 .legend-pop .legend {
   margin: 0;
 }
+.legend-note {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+.legend-note code {
+  font-size: 0.78rem;
+}
 
 .notation-editor textarea {
   font-family: var(--mono);
@@ -316,8 +324,9 @@
   box-sizing: border-box;
 }
 
-/* Notation heading: label + input-mode toggle + (i) help. */
-.notation-head {
+/* Field heading: label + (optional) controls + (i) help. */
+.notation-head,
+.field-head {
   display: flex;
   align-items: center;
   gap: 0.4rem;

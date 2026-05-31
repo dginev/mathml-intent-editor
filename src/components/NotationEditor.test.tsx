@@ -104,6 +104,13 @@ describe('NotationEditor', () => {
     expect(screen.getByTestId('legend')).toBeInTheDocument();
   });
 
+  it('explains that properties are space-separated via the info button', () => {
+    render(<NotationEditor concept={base} onSave={vi.fn()} />);
+    expect(screen.queryByTestId('properties-help')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Properties help'));
+    expect(screen.getByTestId('properties-help')).toHaveTextContent('Space-separated');
+  });
+
   it('warns when a speech $ref is not marked in the notation', () => {
     // base.en references $x, but base.mathml has no arg="x"
     render(<NotationEditor concept={base} onSave={vi.fn()} />);

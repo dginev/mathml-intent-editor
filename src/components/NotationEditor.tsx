@@ -79,6 +79,7 @@ export function NotationEditor({
   const [linksText, setLinksText] = useState(concept.links.join('\n'));
   const [aliasText, setAliasText] = useState(concept.alias.join('\n'));
   const [showLegend, setShowLegend] = useState(false);
+  const [showProperties, setShowProperties] = useState(false);
   // Notation is authored EITHER as TeX (rendered to MathML) OR as raw MathML, seeded with the current.
   const [mode, setMode] = useState<'tex' | 'mathml'>('tex');
   const [rawMathml, setRawMathml] = useState(concept.mathml[0] ?? '');
@@ -165,10 +166,36 @@ export function NotationEditor({
           <span>Area</span>
           <input value={area} onChange={(e) => setArea(e.target.value)} />
         </label>
-        <label className="field">
-          <span>Property</span>
-          <input value={property} onChange={(e) => setProperty(e.target.value)} />
-        </label>
+        <div className="field">
+          <span className="field-head">
+            Properties
+            <span className="info-wrap">
+              <button
+                type="button"
+                className="info-btn"
+                aria-label="Properties help"
+                aria-expanded={showProperties}
+                title="Properties help"
+                onClick={() => setShowProperties((v) => !v)}
+              >
+                ⓘ
+              </button>
+              {showProperties && (
+                <div className="legend-pop">
+                  <p className="legend-note" data-testid="properties-help">
+                    Space-separated list of notation forms — e.g.{' '}
+                    <code>symbol</code> <code>indexed</code> <code>prefix</code> <code>function</code>.
+                  </p>
+                </div>
+              )}
+            </span>
+          </span>
+          <input
+            data-testid="property-input"
+            value={property}
+            onChange={(e) => setProperty(e.target.value)}
+          />
+        </div>
       </div>
 
       {/* Speech + Notation are full-width (contents can be long); speech $refs must be marked in the notation. */}
