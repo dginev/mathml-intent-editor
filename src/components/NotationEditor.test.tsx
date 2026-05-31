@@ -53,7 +53,8 @@ describe('NotationEditor', () => {
   it('saves edits to other fields while keeping the existing notation when TeX is blank', async () => {
     const onSave = vi.fn();
     render(<NotationEditor concept={base} onSave={onSave} />);
-    fireEvent.change(screen.getByDisplayValue('additive inverse of $x'), {
+    fireEvent.click(screen.getByRole('button', { name: 'Edit speech' }));
+    fireEvent.change(screen.getByLabelText('Speech template'), {
       target: { value: 'the additive inverse of $x' },
     });
     fireEvent.click(screen.getByTestId('save'));
@@ -61,6 +62,37 @@ describe('NotationEditor', () => {
     const c = onSave.mock.calls[0][0] as Concept;
     expect(c.en).toBe('the additive inverse of $x');
     expect(c.mathml).toEqual(base.mathml); // notation untouched (TeX left blank)
+  });
+
+  it('adds a second language and splits it into Concept.speech on save', () => {
+    const onSave = vi.fn();
+    render(<NotationEditor concept={base} onSave={onSave} />);
+    fireEvent.click(screen.getByRole('button', { name: '+ Add language' }));
+    const langs = screen.getAllByLabelText('Language');
+    fireEvent.change(langs[langs.length - 1], { target: { value: 'de' } });
+    fireEvent.change(screen.getByLabelText('Speech template'), {
+      target: { value: 'additives Inverses von $x' },
+    });
+    fireEvent.click(screen.getByTestId('save'));
+
+    const c = onSave.mock.calls[0][0] as Concept;
+    expect(c.en).toBe('additive inverse of $x'); // English untouched
+    expect(c.speech).toEqual([{ lang: 'de', text: 'additives Inverses von $x' }]);
+  });
+
+  it('warns about an invalid ISO 639-1 language code', () => {
+    render(<NotationEditor concept={base} onSave={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '+ Add language' }));
+    const langs = screen.getAllByLabelText('Language');
+    fireEvent.change(langs[langs.length - 1], { target: { value: 'xx' } });
+    expect(screen.getByTestId('lang-warning')).toHaveTextContent('xx');
+  });
+
+  it('warns when a notation argument is never used in the speech', async () => {
+    // speech says "$x" but the notation also marks arg="y", which no template references
+    const c: Concept = { ...base, mathml: ["<math><mi arg='x'>n</mi><mi arg='y'>m</mi></math>"] };
+    render(<NotationEditor concept={c} onSave={vi.fn()} />);
+    expect(await screen.findByTestId('unused-warning')).toHaveTextContent('arg="y"');
   });
 
   it('shows an error and disables saving for invalid TeX', async () => {

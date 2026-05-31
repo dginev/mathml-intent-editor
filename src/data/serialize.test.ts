@@ -52,6 +52,25 @@ describe('serializeConcepts', () => {
     expect('area' in e).toBe(false); // cleared in the model → removed on write
   });
 
+  it('writes each speech language as its own ISO 639-1 key and drops removed ones', () => {
+    const out = serializeConcepts([
+      concept({
+        slug: 'x',
+        en: 'ex',
+        speech: [{ lang: 'fr', text: 'ixe' }], // kept
+        raw: { concept: 'x', en: 'ex', de: 'Iks', fr: 'old' }, // `de` was removed in the editor
+      }),
+    ]);
+    const e = (parse(out) as { concepts: Array<{ intents: Array<Record<string, unknown>> }> }).concepts[0]
+      .intents[0];
+    expect(e.en).toBe('ex');
+    expect(e.fr).toBe('ixe'); // overwritten from speech
+    expect('de' in e).toBe(false); // language dropped in the editor → removed on write
+    // and it round-trips back into speech
+    const [back] = parseDictionary(out);
+    expect(back.speech).toEqual([{ lang: 'fr', text: 'ixe' }]);
+  });
+
   it('round-trips parse → serialize → parse without losing concepts', () => {
     const yaml = serializeConcepts([
       concept({ slug: 'a', arity: 0, property: 'symbol', mathml: ['<math><mi>A</mi></math>'] }),

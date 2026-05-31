@@ -1,5 +1,6 @@
 import { parse } from 'yaml';
-import type { Concept } from '../types';
+import ISO6391 from 'iso-639-1';
+import type { Concept, SpeechEntry } from '../types';
 
 /** A raw `intents:` entry. Loose because the file is hand-authored; unknown keys are kept in `raw`. */
 type RawEntry = Record<string, unknown> & {
@@ -19,9 +20,16 @@ const asArray = (v: unknown): string[] =>
   v == null ? [] : Array.isArray(v) ? (v as string[]) : [String(v)];
 
 function normalize(e: RawEntry): Concept {
+  // Any string-valued key that is a valid ISO 639-1 code (other than `en`) is a localized speech
+  // template. `en` stays in its own field; the rest are collected here in file order.
+  const speech: SpeechEntry[] = [];
+  for (const [k, v] of Object.entries(e)) {
+    if (k !== 'en' && typeof v === 'string' && ISO6391.validate(k)) speech.push({ lang: k, text: v });
+  }
   return {
     slug: String(e.concept),
     en: typeof e.en === 'string' ? e.en : undefined,
+    speech,
     area: typeof e.area === 'string' ? e.area.trim() || undefined : undefined,
     arity: typeof e.arity === 'number' ? e.arity : undefined,
     property: typeof e.property === 'string' ? e.property : undefined,

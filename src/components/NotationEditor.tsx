@@ -1,9 +1,16 @@
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from 'react';
-import { missingSpeechRefs, texToIntent } from '../render/intent';
+import ISO6391 from 'iso-639-1';
+import { missingSpeechRefs, texToIntent, unusedArgRefs } from '../render/intent';
 import { loadTemml, type TemmlEngine } from '../render/temmlEngine';
 import { MathML } from './MathML';
 import { MathMLSource } from './MathMLSource';
 import type { Concept } from '../types';
+
+/** One editable speech template row: a stable id, an ISO 639-1 language code, the template, and edit state. */
+type SpeechRow = { id: number; lang: string; text: string; editing: boolean };
+
+/** All ISO 639-1 codes, for the language autocomplete (`<datalist>`). */
+const LANG_CODES = ISO6391.getAllCodes();
 
 /** One editable entry (a link or an alias): a stable id (edit state survives add/remove), its value,
  *  and whether it's currently open for editing. */
@@ -92,7 +99,6 @@ export function NotationEditor({
   knownSlugs?: ReadonlySet<string>;
 }) {
   const [slug, setSlug] = useState(concept.slug);
-  const [en, setEn] = useState(concept.en ?? '');
   const [area, setArea] = useState(concept.area ?? '');
   const [arity, setArity] = useState(concept.arity != null ? String(concept.arity) : '');
   const [property, setProperty] = useState(concept.property ?? '');
@@ -107,8 +113,31 @@ export function NotationEditor({
     concept.alias.map((value, i) => ({ id: i, value, editing: false })),
   );
   const aliasOps = rowOps(setAliasRows);
+
+  // Speech is a list of language-keyed templates; `en` is just the first entry, the rest are extra languages.
+  const [speechRows, setSpeechRows] = useState<SpeechRow[]>(() => {
+    const rows: SpeechRow[] = [];
+    if (concept.en != null) rows.push({ id: 0, lang: 'en', text: concept.en, editing: false });
+    for (const s of concept.speech ?? []) rows.push({ id: rows.length, lang: s.lang, text: s.text, editing: false });
+    return rows;
+  });
+  const setSpeech = (id: number, patch: Partial<SpeechRow>) =>
+    setSpeechRows((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const addSpeech = () =>
+    setSpeechRows((rows) => [
+      ...rows,
+      {
+        id: rows.reduce((m, r) => Math.max(m, r.id), -1) + 1,
+        lang: rows.some((r) => r.lang.trim() === 'en') ? '' : 'en', // first entry defaults to English
+        text: '',
+        editing: true,
+      },
+    ]);
+  const removeSpeech = (id: number) => setSpeechRows((rows) => rows.filter((r) => r.id !== id));
+
   const [showLegend, setShowLegend] = useState(false);
   const [showProperties, setShowProperties] = useState(false);
+  const [showLangs, setShowLangs] = useState(false);
   // Notation is authored EITHER as TeX (rendered to MathML) OR as raw MathML, seeded with the current.
   const [mode, setMode] = useState<'tex' | 'mathml'>('tex');
   const [rawMathml, setRawMathml] = useState(concept.mathml[0] ?? '');
@@ -153,18 +182,37 @@ export function NotationEditor({
 
   // What the preview + validation use: the new notation, else the concept's existing first rendering.
   const effectiveMathml = newMathml ?? concept.mathml[0] ?? null;
+  // Validation spans all languages: a `$ref` in any template, an `arg` referenced by none of them.
+  const allSpeech = useMemo(() => speechRows.map((r) => r.text).join('\n'), [speechRows]);
   const missingRefs = useMemo(
-    () => (effectiveMathml ? missingSpeechRefs(en, effectiveMathml) : []),
-    [en, effectiveMathml],
+    () => (effectiveMathml ? missingSpeechRefs(allSpeech, effectiveMathml) : []),
+    [allSpeech, effectiveMathml],
+  );
+  const unusedArgs = useMemo(
+    () => (effectiveMathml && allSpeech.trim() !== '' ? unusedArgRefs(allSpeech, effectiveMathml) : []),
+    [allSpeech, effectiveMathml],
+  );
+  const invalidLangs = useMemo(
+    () => speechRows.map((r) => r.lang.trim()).filter((l) => l !== '' && !ISO6391.validate(l)),
+    [speechRows],
   );
 
   const buildUpdated = (): Concept => {
     const mathml = newMathml ? [newMathml, ...concept.mathml.slice(1)] : concept.mathml;
     const n = Number(arity);
+    // Speech rows split back into `en` (English) + `speech` (other valid, non-empty ISO 639-1 languages).
+    const en = speechRows.find((r) => r.lang.trim() === 'en')?.text.trim() || undefined;
+    const speech = speechRows
+      .filter((r) => {
+        const lang = r.lang.trim();
+        return lang !== '' && lang !== 'en' && r.text.trim() !== '' && ISO6391.validate(lang);
+      })
+      .map((r) => ({ lang: r.lang.trim(), text: r.text.trim() }));
     return {
       ...concept, // carries `raw` for lossless serialization
       slug: slug.trim(),
-      en: en.trim() || undefined,
+      en,
+      speech,
       area: area.trim() || undefined,
       arity: arity.trim() === '' || Number.isNaN(n) ? undefined : n,
       property: property.trim() || undefined,
@@ -227,11 +275,110 @@ export function NotationEditor({
         </div>
       </div>
 
-      {/* Speech + Notation are full-width (contents can be long); speech $refs must be marked in the notation. */}
-      <label className="field">
-        <span>Speech (en)</span>
-        <textarea value={en} spellCheck={false} rows={2} onChange={(e) => setEn(e.target.value)} />
-      </label>
+      {/* Speech is full-width and multilingual: one template per language (ISO 639-1 key). */}
+      <div className="field">
+        <span className="field-head">
+          Speech
+          <span className="info-wrap">
+            <button
+              type="button"
+              className="info-btn"
+              aria-label="Language help"
+              aria-expanded={showLangs}
+              title="Language help"
+              onClick={() => setShowLangs((v) => !v)}
+            >
+              ⓘ
+            </button>
+            {showLangs && (
+              <div className="legend-pop">
+                <p className="legend-note" data-testid="language-help">
+                  Each template is keyed by an ISO 639-1 language code — <code>en</code> (English),{' '}
+                  <code>de</code> (German), <code>fr</code> (French)… Start typing a code to autocomplete.
+                  Speak each argument with a <code>$ref</code> (e.g. <code>$x</code>, <code>$1</code>).
+                </p>
+              </div>
+            )}
+          </span>
+        </span>
+        <div className="speech-list" data-testid="speech-list">
+          {speechRows.map((row) =>
+            row.editing || row.text.trim() === '' ? (
+              <div
+                className="speech-row editing"
+                key={row.id}
+                onBlur={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) setSpeech(row.id, { editing: false });
+                }}
+              >
+                <input
+                  className="lang-input"
+                  list="iso-639-langs"
+                  aria-label="Language"
+                  placeholder="en"
+                  value={row.lang}
+                  spellCheck={false}
+                  size={4}
+                  onChange={(e) => setSpeech(row.id, { lang: e.target.value })}
+                />
+                <textarea
+                  className="speech-input"
+                  aria-label="Speech template"
+                  rows={2}
+                  value={row.text}
+                  spellCheck={false}
+                  placeholder="additive inverse of $x"
+                  onChange={(e) => setSpeech(row.id, { text: e.target.value })}
+                />
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="Remove speech"
+                  title="Remove"
+                  onClick={() => removeSpeech(row.id)}
+                >
+                  ×
+                </button>
+              </div>
+            ) : (
+              <div className="speech-row" key={row.id}>
+                <span className="lang-badge" data-testid="lang-badge" title={ISO6391.getName(row.lang) || row.lang}>
+                  {row.lang || '—'}
+                </span>
+                <span className="speech-text">{row.text}</span>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="Edit speech"
+                  title="Edit"
+                  onClick={() => setSpeech(row.id, { editing: true })}
+                >
+                  ✎
+                </button>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="Remove speech"
+                  title="Remove"
+                  onClick={() => removeSpeech(row.id)}
+                >
+                  ×
+                </button>
+              </div>
+            ),
+          )}
+          <button type="button" className="add-link" onClick={addSpeech}>
+            + Add language
+          </button>
+        </div>
+        <datalist id="iso-639-langs">
+          {LANG_CODES.map((code) => (
+            <option key={code} value={code}>
+              {ISO6391.getName(code)}
+            </option>
+          ))}
+        </datalist>
+      </div>
 
       <div className="field">
         <span className="notation-head">
@@ -301,6 +448,16 @@ export function NotationEditor({
       {missingRefs.length > 0 && (
         <p className="warn" role="status" data-testid="ref-warning">
           Speech references not marked in the notation: {missingRefs.join(', ')}
+        </p>
+      )}
+      {unusedArgs.length > 0 && (
+        <p className="warn" role="status" data-testid="unused-warning">
+          Notation arguments never used in the speech: {unusedArgs.map((a) => `arg="${a}"`).join(', ')}
+        </p>
+      )}
+      {invalidLangs.length > 0 && (
+        <p className="warn" role="status" data-testid="lang-warning">
+          Not valid ISO 639-1 language codes (won’t be saved): {invalidLangs.join(', ')}
         </p>
       )}
 

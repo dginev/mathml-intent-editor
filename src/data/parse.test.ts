@@ -28,6 +28,19 @@ describe('parseDictionary (W3C open.yml schema)', () => {
     expect(concepts[1].alias).toEqual(['exponentiation']);
   });
 
+  it('collects non-en ISO 639-1 keys into speech, leaving en and unmodeled keys alone', () => {
+    const yaml = w3cYaml([
+      { concept: 'x', en: 'ex', de: 'Iks', fr: 'ixe', notationa: 'mo ′' },
+    ]);
+    const [c] = parseDictionary(yaml);
+    expect(c.en).toBe('ex'); // English stays in its own field
+    expect(c.speech).toEqual([
+      { lang: 'de', text: 'Iks' },
+      { lang: 'fr', text: 'ixe' },
+    ]);
+    expect(c.raw?.notationa).toBe('mo ′'); // a non-language key is not mistaken for speech
+  });
+
   it('keeps the original entry in raw for lossless round-trip', () => {
     const yaml = w3cYaml([{ concept: 'x', notationa: 'mo ′', comments: 'legacy' }]);
     const [c] = parseDictionary(yaml);

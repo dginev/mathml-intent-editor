@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import temml from 'temml';
-import { missingSpeechRefs, texToIntent } from './intent';
+import { missingSpeechRefs, texToIntent, unusedArgRefs } from './intent';
 import type { TemmlEngine } from './temmlEngine';
 
 // In Node (vitest) Temml's command registration works correctly, so we use the real engine directly.
@@ -97,5 +97,21 @@ describe('missingSpeechRefs', () => {
     const mathml = "<math><mi arg='a1'>A</mi></math>";
     expect(missingSpeechRefs('f of $1 and $2', mathml)).toEqual(['$2']);
     expect(missingSpeechRefs('$x', '<math><mi>x</mi></math>')).toEqual(['$x']);
+  });
+});
+
+describe('unusedArgRefs', () => {
+  it('reports a notation argument referenced by no speech $ref', () => {
+    const mathml = "<math><mi arg='x'>n</mi><mi arg='y'>m</mi></math>";
+    expect(unusedArgRefs('inverse of $x', mathml)).toEqual(['y']);
+  });
+
+  it('treats positional arg="aN" as spoken by $N', () => {
+    const mathml = "<math><mi arg='a1'>A</mi><mi arg='a2'>B</mi></math>";
+    expect(unusedArgRefs('union of $1 and $2', mathml)).toEqual([]);
+  });
+
+  it('is empty when every marked argument is spoken (named refs)', () => {
+    expect(unusedArgRefs('$lhs iff $rhs', "<math><mi arg='lhs'/><mi arg='rhs'/></math>")).toEqual([]);
   });
 });
