@@ -1,22 +1,53 @@
-/** Generic/locale subdomains skipped when labelling a link (so `en.wikipedia.org` → `wikipedia`). */
-const GENERIC_SUBDOMAINS = new Set([
-  'www', 'm', 'mobile', 'en', 'de', 'fr', 'es', 'it', 'pt', 'ru', 'ja', 'zh', 'nl', 'pl', 'sv', 'ar', 'ko', 'tr',
-]);
+/**
+ * Recognized reference sites → the short label shown on the chip. Matched by hostname (exact or as a
+ * subdomain), most-specific first (so `mathworld.wolfram.com` wins over `wolfram.com`).
+ */
+const KNOWN_SITES: ReadonlyArray<readonly [host: string, label: string]> = [
+  ['mathworld.wolfram.com', 'mathworld'],
+  ['wikipedia.org', 'wikipedia'],
+  ['wikidata.org', 'wikidata'],
+  ['ncatlab.org', 'ncatlab'],
+  ['oeis.org', 'oeis'],
+  ['britannica.com', 'britannica'],
+  ['planetmath.org', 'planetmath'],
+  ['encyclopediaofmath.org', 'encyclopediaofmath'],
+  ['proofwiki.org', 'proofwiki'],
+  ['dlmf.nist.gov', 'dlmf'],
+  ['arxiv.org', 'arxiv'],
+  ['wolfram.com', 'wolfram'],
+];
+
+/** Split a URL into its hostname and pathname, tolerating a missing protocol. */
+function hostAndPath(url: string): { host: string; path: string } {
+  try {
+    const u = new URL(url);
+    return { host: u.hostname, path: u.pathname };
+  } catch {
+    const rest = url.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
+    const slash = rest.indexOf('/');
+    return slash === -1 ? { host: rest, path: '' } : { host: rest.slice(0, slash), path: rest.slice(slash) };
+  }
+}
 
 /**
- * A short, recognizable label for a URL: drop generic/locale prefixes, take the first real label
- * (`en.wikipedia.org` → `wikipedia`, `mathworld.wolfram.com` → `mathworld`, `oeis.org` → `oeis`).
+ * A short chip label for a reference URL. If the host is a recognized encyclopedia (whitelist above),
+ * use its name (`en.wikipedia.org` → `wikipedia`); otherwise the site is irrelevant, so fall back to the
+ * URL's filename — its last path segment (`…/thesis_abhay.pdf` → `thesis_abhay.pdf`), or the bare host.
  */
 export function linkDomain(url: string): string {
-  let host: string;
-  try {
-    host = new URL(url).hostname;
-  } catch {
-    host = url.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').split('/')[0];
+  const { host, path } = hostAndPath(url);
+  const h = host.toLowerCase();
+  for (const [needle, label] of KNOWN_SITES) {
+    if (h === needle || h.endsWith(`.${needle}`)) return label;
   }
-  const labels = host.replace(/^www\./i, '').split('.').filter(Boolean);
-  if (labels.length === 0) return url;
-  let i = 0;
-  while (i < labels.length - 1 && GENERIC_SUBDOMAINS.has(labels[i].toLowerCase())) i++;
-  return labels[i] || host;
+  const segments = path.split('/').filter(Boolean);
+  const last = segments[segments.length - 1];
+  if (last) {
+    try {
+      return decodeURIComponent(last);
+    } catch {
+      return last;
+    }
+  }
+  return host.replace(/^www\./i, '') || url;
 }
