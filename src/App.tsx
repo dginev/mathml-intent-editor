@@ -537,7 +537,7 @@ export default function App() {
             data={rows}
             total={total}
             filter={filter}
-            onSelect={openEditor}
+            onEdit={canEdit ? openEditor : undefined}
             onLoadMore={loadMore}
             editingId={editing ? conceptId(editing) : null}
             onDelete={canEdit ? toggleRowDelete : undefined}
