@@ -251,6 +251,7 @@
   gap: 0.35rem;
   font-size: 0.85rem;
   margin-bottom: 1rem;
+  position: relative; /* positioning context for the field's (i) legend popover */
 }
 /* Speech + Notation are full-width: their contents can be long. */
 .notation-editor .field textarea {
@@ -258,19 +259,17 @@
   box-sizing: border-box;
 }
 
-/* Macro legend pops up ABOVE the (i) button, anchored to its right edge. */
 .info-wrap {
-  position: relative;
   display: inline-flex;
 }
-/* Floating legend above the (i); offset rightward so it clears the modal's left edge. */
+/* The legend floats above the field it belongs to and spans that field's width (which is the modal
+   width, or a modal column) — so it stays aligned to the modal edges and can never overflow + clip. */
 .legend-pop {
   position: absolute;
   bottom: calc(100% + 6px);
-  transform: translateX(-30%);
+  left: 0;
+  right: 0;
   z-index: 50;
-  width: max-content;
-  max-width: min(26rem, 80vw);
   padding: 0.6rem 0.8rem;
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -280,10 +279,10 @@
 .legend-pop .legend {
   margin: 0;
 }
-/* The macro legend (Notation TeX) needs room for the long \intent example. */
-.legend-pop:has(.legend) {
-  min-width: min(46rem, 98vw);
-  max-width: min(46rem, 98vw);
+/* Short notes don't need the full width — cap them, anchored to the field's left edge. */
+.legend-pop:has(.legend-note) {
+  right: auto;
+  max-width: min(32rem, 100%);
 }
 .legend-note {
   margin: 0;
@@ -471,9 +470,12 @@
 }
 .speech-row {
   display: flex;
-  align-items: flex-start;
+  align-items: baseline; /* the "en" badge and the template text share a baseline */
   gap: 0.4rem;
   width: 100%;
+}
+.speech-row.editing {
+  align-items: flex-start; /* multi-line textarea: top-align the controls instead */
 }
 /* Language badge/input share the slender look of the TeX / Raw MathML toggle buttons. */
 .lang-badge {
@@ -486,7 +488,6 @@
   color: var(--text-muted);
   font-family: var(--mono);
   font-size: 0.7rem;
-  margin-top: 0.25rem;
 }
 .speech-text {
   flex: 1;
@@ -494,7 +495,6 @@
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 0.85rem;
-  padding-top: 0.1rem;
 }
 .lang-input {
   flex: none;
@@ -506,7 +506,6 @@
   border-radius: 6px;
   background: var(--bg);
   color: inherit;
-  margin-top: 0.2rem;
 }
 .speech-input {
   flex: 1;
@@ -521,7 +520,6 @@
   font-size: 0.95rem;
   line-height: 1;
   padding: 0.1rem 0.25rem;
-  margin-top: 0.2rem;
   border-radius: 4px;
 }
 .speech-row .icon-btn:hover {
