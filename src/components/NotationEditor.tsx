@@ -1,18 +1,32 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from 'react';
 import { missingSpeechRefs, texToIntent } from '../render/intent';
 import { loadTemml, type TemmlEngine } from '../render/temmlEngine';
 import { MathML } from './MathML';
 import { MathMLSource } from './MathMLSource';
 import type { Concept } from '../types';
 
-const lines = (s: string): string[] =>
-  s
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean);
+/** One editable entry (a link or an alias): a stable id (edit state survives add/remove), its value,
+ *  and whether it's currently open for editing. */
+type EditRow = { id: number; value: string; editing: boolean };
 
-/** One editable link: a stable id (edit state survives add/remove), its URL, and whether it's open for editing. */
-type LinkRow = { id: number; value: string; editing: boolean };
+const NO_SLUGS: ReadonlySet<string> = new Set();
+
+/** Row-list state helpers shared by the Links and Aliases editors. New rows get `max(id)+1` — stable
+ *  and unique among current rows, computed inside the (deferred) updater so no render-time ref is needed. */
+function rowOps(setRows: Dispatch<SetStateAction<EditRow[]>>) {
+  return {
+    setValue: (id: number, value: string) =>
+      setRows((rows) => rows.map((r) => (r.id === id ? { ...r, value } : r))),
+    setEditing: (id: number, editing: boolean) =>
+      setRows((rows) => rows.map((r) => (r.id === id ? { ...r, editing } : r))),
+    add: () =>
+      setRows((rows) => [
+        ...rows,
+        { id: rows.reduce((m, r) => Math.max(m, r.id), -1) + 1, value: '', editing: true },
+      ]),
+    remove: (id: number) => setRows((rows) => rows.filter((r) => r.id !== id)),
+  };
+}
 
 function MacroLegend() {
   return (
@@ -68,11 +82,14 @@ export function NotationEditor({
   onSave,
   onDelete,
   onCancel,
+  knownSlugs = NO_SLUGS,
 }: {
   concept: Concept;
   onSave: (updated: Concept) => void;
   onDelete?: () => void;
   onCancel?: () => void;
+  /** All concept names in the dictionary — an alias highlights when it names a known concept. */
+  knownSlugs?: ReadonlySet<string>;
 }) {
   const [slug, setSlug] = useState(concept.slug);
   const [en, setEn] = useState(concept.en ?? '');
@@ -80,20 +97,16 @@ export function NotationEditor({
   const [arity, setArity] = useState(concept.arity != null ? String(concept.arity) : '');
   const [property, setProperty] = useState(concept.property ?? '');
   const [tex, setTex] = useState(concept.tex ?? '');
-  // Initial ids are the indices; the counter starts past them so new rows never collide.
-  const linkId = useRef(concept.links.length);
-  const [linkRows, setLinkRows] = useState<LinkRow[]>(() =>
+  // Links & aliases are row lists keyed by a stable id (initialized to the index).
+  const [linkRows, setLinkRows] = useState<EditRow[]>(() =>
     concept.links.map((value, i) => ({ id: i, value, editing: false })),
   );
-  const [aliasText, setAliasText] = useState(concept.alias.join('\n'));
+  const linkOps = rowOps(setLinkRows);
 
-  const setLinkValue = (id: number, value: string) =>
-    setLinkRows((rows) => rows.map((r) => (r.id === id ? { ...r, value } : r)));
-  const setLinkEditing = (id: number, editing: boolean) =>
-    setLinkRows((rows) => rows.map((r) => (r.id === id ? { ...r, editing } : r)));
-  const addLink = () =>
-    setLinkRows((rows) => [...rows, { id: linkId.current++, value: '', editing: true }]);
-  const removeLink = (id: number) => setLinkRows((rows) => rows.filter((r) => r.id !== id));
+  const [aliasRows, setAliasRows] = useState<EditRow[]>(() =>
+    concept.alias.map((value, i) => ({ id: i, value, editing: false })),
+  );
+  const aliasOps = rowOps(setAliasRows);
   const [showLegend, setShowLegend] = useState(false);
   const [showProperties, setShowProperties] = useState(false);
   // Notation is authored EITHER as TeX (rendered to MathML) OR as raw MathML, seeded with the current.
@@ -157,7 +170,7 @@ export function NotationEditor({
       property: property.trim() || undefined,
       mathml,
       links: linkRows.map((r) => r.value.trim()).filter(Boolean),
-      alias: lines(aliasText),
+      alias: aliasRows.map((r) => r.value.trim()).filter(Boolean),
       // TeX kept only when it authored the notation; raw-MathML authoring clears it.
       tex: mode === 'tex' ? tex.trim() || undefined : undefined,
     };
@@ -331,12 +344,12 @@ export function NotationEditor({
                     value={row.value}
                     spellCheck={false}
                     autoFocus
-                    onChange={(e) => setLinkValue(row.id, e.target.value)}
-                    onBlur={() => setLinkEditing(row.id, false)}
+                    onChange={(e) => linkOps.setValue(row.id, e.target.value)}
+                    onBlur={() => linkOps.setEditing(row.id, false)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        setLinkEditing(row.id, false);
+                        linkOps.setEditing(row.id, false);
                       }
                     }}
                   />
@@ -345,7 +358,7 @@ export function NotationEditor({
                     className="icon-btn"
                     aria-label="Remove link"
                     title="Remove"
-                    onClick={() => removeLink(row.id)}
+                    onClick={() => linkOps.remove(row.id)}
                   >
                     ×
                   </button>
@@ -361,7 +374,7 @@ export function NotationEditor({
                     className="icon-btn"
                     aria-label="Edit link"
                     title="Edit"
-                    onClick={() => setLinkEditing(row.id, true)}
+                    onClick={() => linkOps.setEditing(row.id, true)}
                   >
                     ✎
                   </button>
@@ -370,27 +383,85 @@ export function NotationEditor({
                     className="icon-btn"
                     aria-label="Remove link"
                     title="Remove"
-                    onClick={() => removeLink(row.id)}
+                    onClick={() => linkOps.remove(row.id)}
                   >
                     ×
                   </button>
                 </div>
               ),
             )}
-            <button type="button" className="add-link" onClick={addLink}>
+            <button type="button" className="add-link" onClick={() => linkOps.add()}>
               + Add link
             </button>
           </div>
         </div>
-        <label className="field">
-          <span>Aliases — one per line</span>
-          <textarea
-            value={aliasText}
-            spellCheck={false}
-            rows={2}
-            onChange={(e) => setAliasText(e.target.value)}
-          />
-        </label>
+        <div className="field">
+          <span>Aliases</span>
+          <div className="alias-list" data-testid="alias-list">
+            {aliasRows.map((row) =>
+              row.editing || row.value.trim() === '' ? (
+                <span className="alias-edit" key={row.id}>
+                  <input
+                    className="alias-input"
+                    aria-label="Alias"
+                    placeholder="snake_case"
+                    value={row.value}
+                    spellCheck={false}
+                    autoFocus
+                    size={Math.max(row.value.length + 1, 8)}
+                    onChange={(e) => aliasOps.setValue(row.id, e.target.value)}
+                    onBlur={() => aliasOps.setEditing(row.id, false)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        aliasOps.setEditing(row.id, false);
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label="Remove alias"
+                    title="Remove"
+                    onClick={() => aliasOps.remove(row.id)}
+                  >
+                    ×
+                  </button>
+                </span>
+              ) : (
+                // A completed alias is a chip: highlighted when it names a known concept, muted when not.
+                <span
+                  className={`alias-chip ${knownSlugs.has(row.value.trim()) ? 'known' : 'unknown'}`}
+                  key={row.id}
+                  data-testid="alias-chip"
+                >
+                  <span className="alias-text">{row.value}</span>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label="Edit alias"
+                    title="Edit"
+                    onClick={() => aliasOps.setEditing(row.id, true)}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label="Remove alias"
+                    title="Remove"
+                    onClick={() => aliasOps.remove(row.id)}
+                  >
+                    ×
+                  </button>
+                </span>
+              ),
+            )}
+            <button type="button" className="add-alias" aria-label="Add alias" onClick={() => aliasOps.add()}>
+              +
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="actions">

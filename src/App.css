@@ -382,6 +382,87 @@
   border-color: var(--link);
 }
 
+/* Aliases: snake_case chips that flow inline; each opens to an inline input for editing. */
+.alias-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+.alias-chip,
+.alias-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+.alias-chip {
+  padding: 0.1rem 0.25rem 0.1rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+.alias-text {
+  font-family: var(--mono);
+}
+/* Highlighted: the alias names a concept that exists in the dictionary. */
+.alias-chip.known {
+  border-color: var(--accent);
+  background: var(--annot-bg);
+}
+.alias-chip.known .alias-text {
+  color: var(--annot-text);
+}
+/* Readable but inactive: the alias does not (yet) match a known concept. */
+.alias-chip.unknown {
+  border-style: dashed;
+  background: transparent;
+}
+.alias-chip.unknown .alias-text {
+  color: var(--text-muted);
+}
+.alias-input {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: inherit;
+}
+.alias-chip .icon-btn,
+.alias-edit .icon-btn {
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+  border-radius: 4px;
+}
+.alias-chip .icon-btn:hover,
+.alias-edit .icon-btn:hover {
+  color: var(--text);
+}
+.add-alias {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--link);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+.add-alias:hover {
+  border-color: var(--link);
+}
+
 /* Field heading: label + (optional) controls + (i) help. */
 .notation-head,
 .field-head {
