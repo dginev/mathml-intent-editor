@@ -3,6 +3,7 @@ import { createSeedSource, createSource, type ConceptSource } from './data/sourc
 import { loadDictionary } from './data/loadDictionary';
 import { loadEdits, saveEdits, clearEdits } from './data/editCache';
 import { conceptId } from './data/conceptId';
+import { conceptMatches } from './data/conceptMatch';
 import { byConcept, serializeConcepts } from './data/serialize';
 import {
   changeSummary,
@@ -85,6 +86,22 @@ export default function App() {
   const loadingRef = useRef(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const saveDialogRef = useRef<HTMLDialogElement>(null);
+  const filterRef = useRef<HTMLInputElement>(null);
+
+  // Rebind Ctrl/⌘+F to the in-app Filter (which searches the whole dictionary) — the browser's native
+  // find only sees the virtualized window. Left alone while a modal is open.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F') && !e.shiftKey && !e.altKey) {
+        if (document.querySelector('dialog[open]')) return; // don't hijack find while editing
+        e.preventDefault();
+        filterRef.current?.focus();
+        filterRef.current?.select();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // Drive the native modal dialog from `editing` (showModal centres + traps focus; close() on cancel).
   useEffect(() => {
@@ -476,20 +493,29 @@ export default function App() {
   // ungated in local-only mode (no service), otherwise only while signed in.
   const canEdit = !service || !!identity;
 
+  // Filtering searches the WHOLE dictionary (source.all()) and shows every match unpaged; clearing the
+  // filter resumes the paged prefix (`rows`).
+  const filtering = filter.trim() !== '';
+  const visible = filtering && source ? source.all().filter((c) => conceptMatches(c, filter)) : rows;
+
   return (
     <div className="app">
       <header className="app-header">
         <h1>MathML Intent Open Editor</h1>
         <div className="toolbar">
           <input
+            ref={filterRef}
             type="search"
             placeholder="Filter concepts…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
           <span className="count" data-testid="concept-count" data-total={total}>
-            {total.toLocaleString()} concepts
-            {source && rows.length < total ? ` · ${rows.length.toLocaleString()} loaded` : ''}
+            {filtering
+              ? `${visible.length.toLocaleString()} match${visible.length === 1 ? '' : 'es'}`
+              : `${total.toLocaleString()} concepts${
+                  source && rows.length < total ? ` · ${rows.length.toLocaleString()} loaded` : ''
+                }`}
           </span>
           <span className="session-status">
             {!service
@@ -539,11 +565,10 @@ export default function App() {
         {!source && !error && <p className="status">Loading dictionary…</p>}
         {source && (
           <ConceptTable
-            data={rows}
-            total={total}
-            filter={filter}
+            data={visible}
+            total={filtering ? visible.length : total}
             onEdit={canEdit ? openEditor : undefined}
-            onLoadMore={loadMore}
+            onLoadMore={filtering ? undefined : loadMore}
             editingId={editing ? conceptId(editing) : null}
             onDelete={canEdit ? toggleRowDelete : undefined}
             changeKind={changeKind}
