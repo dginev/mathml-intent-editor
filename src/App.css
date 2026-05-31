@@ -232,6 +232,13 @@
   font-size: 0.78rem;
   overflow-wrap: anywhere; /* let the longer example wrap within its column */
 }
+/* Macro column: keep the names on one line so the column sizes to fit them. */
+.legend td:first-child {
+  white-space: nowrap;
+}
+.legend td:first-child code {
+  overflow-wrap: normal;
+}
 
 .notation-editor h2 {
   font-size: 1rem;
