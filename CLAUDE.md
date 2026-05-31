@@ -141,15 +141,16 @@ runs without a backend. So **don't remove the seed path** — the perf e2e depen
   `localStorage` so a reload restores in-progress changes; `baseAtEdit` is the per-concept ancestor.
 - `src/data/loadDictionary.ts` — orchestrator: raw base (+ the active PR `branch` when one is tracked)
   ∪ local edits → `threeWayMerge` → `{ concepts, conflicts, base }`. `App` shows a conflict banner.
-- `src/data/source.ts` — `ConceptSource`: paged, **on-demand** access (`fetchRange(start,end)`, `total`,
-  `applyEdit`, `serialize`). The UI knows `total` up front but pages rows in (PAGE=50 ≈ a couple of
-  viewports) as the user scrolls — `App` grows a loaded prefix and `ConceptTable` calls `onLoadMore`
-  near the loaded bottom. `createSeedSource` parses the seed once then slices on demand (the seed is one
-  file; a real backend would range-fetch over the network — same interface). **Filtering searches the
-  whole dictionary**: when the filter is non-empty `App` passes `source.all()` filtered by
-  `conceptMatches` (slug/en/speech/area/alias) and shows every match **unpaged**; clearing the filter
-  resumes the paged prefix. Ctrl/⌘+F is rebound to focus the filter (native find can't see the
-  virtualized rows).
+- `src/hooks/useDictionary.ts` — the **working set** as one `useReducer` over immutable state
+  (`concepts` (all, canonical order, incl. held-for-display deletions), `loadedCount`, `baseMap`,
+  `baseline`, `deletedIds`, `dirty`, `conflicts`). Load/paging/edit/add/delete-toggle/commit are pure
+  transitions (`dirty` recomputed in the reducer); the edit cache is persisted as a derived effect. The
+  hook loads from GitHub (active branch or `main`, reconciled with the cache) or the seed fixture; `App`
+  handlers just `dispatch`. Paging reveals `concepts.slice(0, loadedCount)` (PAGE=50 ≈ a couple of
+  viewports); `ConceptTable` calls `onLoadMore` near the bottom. **Filtering searches the whole
+  dictionary**: a non-empty filter shows `concepts.filter(conceptMatches)` (slug/en/speech/area/alias)
+  **unpaged**; clearing it resumes the paged prefix. Ctrl/⌘+F focuses the filter (native find can't see
+  the virtualized rows).
 - `src/components/ConceptTable.tsx` — headless TanStack Table + TanStack Virtual. DOM row windowing
   with absolute-positioned rows; it renders exactly the `data` it's given (filtering happens upstream in
   `App`). Notation column renders the stored MathML via `<MathML>`.
