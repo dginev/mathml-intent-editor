@@ -2,14 +2,16 @@ import { parseDictionary } from './parse';
 import type { Concept } from './../types';
 
 /**
- * Fetch and parse the seed dictionary from `/open.yml` (served from `public/`).
+ * Fetch and parse the synthetic dev/e2e seed fixture from `/seed.fixture.yml` (served from `public/`).
+ * This is NOT the real Intent Open list — the editor reads that from GitHub; the fixture only exists so
+ * the no-backend dev path and the 10k-row perf e2e have offline, deterministic data.
  *
- * `multiplier` clones every concept N times with a `-{i}` suffix so we can exercise the table at
- * the 10k+ row scale the spec targets while the real seed is only ~1k. Use 1 for real data.
+ * `multiplier` clones every concept N times with a `-{i}` suffix so a handful of fixture entries can
+ * exercise the table at the 10k+ row scale the spec targets. Use 1 for the unmultiplied fixture.
  */
 export async function loadSeed(multiplier = 1): Promise<Concept[]> {
-  const res = await fetch(`${import.meta.env.BASE_URL}open.yml`);
-  if (!res.ok) throw new Error(`Failed to load open.yml: ${res.status}`);
+  const res = await fetch(`${import.meta.env.BASE_URL}seed.fixture.yml`);
+  if (!res.ok) throw new Error(`Failed to load seed.fixture.yml: ${res.status}`);
   const base = parseDictionary(await res.text());
 
   if (multiplier <= 1) return base;

@@ -62,10 +62,13 @@ Key facts (verified against the real file, 1012 entries):
   keys the reconcile map, edit cache, source index, and edits, so overloads never collapse.
 - **Canonical order is `(concept, arity)`** — ASCII by name, then ascending arity (`byConcept`). The
   serializer emits this deterministically (`lineWidth:0`, lossless via `raw`); `canonical.test.ts` proves
-  parse→serialize is lossless + idempotent on the real file. This is what keeps PR diffs minimal.
+  parse→serialize is lossless + idempotent. This is what keeps PR diffs minimal. The backing repo's
+  `main` was canonicalized once (an "initial lint") so the first editor Save didn't reformat the whole
+  file; with a canonical base, a single-concept edit is a one-line diff.
 - `mathml` items are full `<math>…</math>` carrying `intent='…'`/`arg='…'`; the editor stores edits the
   same way (`<math>` + the `texToIntent` fragment).
-- `public/open.yml` is a copy of the real file, used as the dev/e2e fixture (×`DEV_MULTIPLIER` for 10k rows).
+- The editor does **not** keep a copy of the real list — it reads it from GitHub. `public/seed.fixture.yml`
+  is a small *synthetic* fixture (dev/e2e only), cloned ×`DEV_MULTIPLIER` to hit the 10k-row target.
 
 ## Chosen stack
 
@@ -123,11 +126,11 @@ Work **red→green**: write the failing test first, watch it fail for the right 
 client-side; otherwise (dev/e2e) it falls back to the seed ×`DEV_MULTIPLIER` so the 10k-row perf guard
 runs without a backend. So **don't remove the seed path** — the perf e2e depends on it.
 
-- `public/open.yml` — the seed dictionary (dev/e2e fixture, served statically).
+- `public/seed.fixture.yml` — a small synthetic dev/e2e fixture (served statically), **not** the real list.
 - `src/types.ts` — the `Concept` type (our model; see "Data model").
 - `src/data/parse.ts` — `parseDictionary(text)`: YAML `open.yml` → normalized `Concept[]` (shared by
   the seed loader and the raw reader).
-- `src/data/loadSeed.ts` — fetches `public/open.yml` and clones ×`multiplier` to hit the 10k target.
+- `src/data/loadSeed.ts` — fetches `public/seed.fixture.yml` and clones ×`multiplier` to hit the 10k target.
 - `src/data/githubRaw.ts` — `rawUrl()` + `fetchDictionary()`: read `open.yml` from
   `raw.githubusercontent` (ACAO:* → no CORS), `404 → null`.
 - `src/data/reconcile.ts` — `threeWayMerge(ancestor, ours, theirs)` over the slug-keyed map: adopt
