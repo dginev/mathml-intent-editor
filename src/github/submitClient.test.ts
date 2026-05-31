@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { submitToService } from './submitClient';
+import { resetSession, submitToService } from './submitClient';
 
 describe('submitToService', () => {
   it('POSTs content + JWT and returns the PR info', async () => {
@@ -29,5 +29,23 @@ describe('submitToService', () => {
     await expect(
       submitToService('s', 'bad', { content: 'x', message: 'm' }, fetchImpl),
     ).rejects.toThrow('invalid session');
+  });
+});
+
+describe('resetSession', () => {
+  it('POSTs /reset with the Bearer JWT and returns the deletion result', async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ deleted: true }),
+    })) as unknown as typeof fetch;
+
+    const out = await resetSession('https://svc.example', 'jwt123', fetchImpl);
+
+    expect(out).toEqual({ deleted: true });
+    const [url, init] = (fetchImpl as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0];
+    expect(url).toBe('https://svc.example/reset');
+    expect(init.method).toBe('POST');
+    expect((init.headers as Record<string, string>).authorization).toBe('Bearer jwt123');
   });
 });
