@@ -124,9 +124,9 @@ export function NotationEditor({
             <td>
               <code>{'\\intent{expr}{…}'}</code>
             </td>
-            <td>set the concept intent</td>
+            <td>mark an intent expression</td>
             <td>
-              <code>{'\\intent{neg($x)}{…}'}</code>
+              <code>{'\\intent{biconditional($lhs,$rhs)}{\\arg{lhs}{A}\\iff\\arg{rhs}{B}}'}</code>
             </td>
           </tr>
           <tr>
