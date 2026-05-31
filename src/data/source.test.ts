@@ -52,4 +52,13 @@ describe('createSource', () => {
     const slugs = (await src.fetchRange(0, 9)).map((c) => c.slug);
     expect(slugs).toEqual(['c0', 'c2']);
   });
+
+  it('adds a new concept in canonical (concept, arity) position', async () => {
+    // slugs c0, c1, c2 — inserting "c15" lands between c1 and c2 by ASCII order
+    const src = createSource(make(3));
+    src.add({ slug: 'c15', mathml: ['<mi>z</mi>'], links: [], alias: [] });
+    expect(src.total).toBe(4);
+    const slugs = (await src.fetchRange(0, 9)).map((c) => c.slug);
+    expect(slugs).toEqual(['c0', 'c1', 'c15', 'c2']);
+  });
 });

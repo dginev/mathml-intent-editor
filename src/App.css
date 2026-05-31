@@ -155,15 +155,83 @@
   outline-offset: -2px;
 }
 
-/* ---- layout: a single centred table fills the body ---- */
+/* ---- layout: a toolbar above a single table that fills the body ---- */
 .body {
   flex: 1 1 auto;
   display: flex;
+  flex-direction: column;
   min-height: 0;
 }
 
 .body .table-scroll {
   flex: 1 1 auto;
+  min-height: 0; /* let the scroll container shrink inside the flex column */
+}
+
+/* Toolbar above the table: Add entry + the batch Save, top-right. */
+.body-toolbar {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+}
+.add-entry {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.add-entry:hover {
+  border-color: var(--accent);
+}
+.save-batch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+  font: inherit;
+  font-weight: 600;
+  font-size: 1rem;
+  padding: 0.55rem 1.6rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.save-batch:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.save-batch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Per-row delete (✗) and the red pre-confirm flash. */
+.row-x {
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0.2rem 0.35rem;
+  border-radius: 4px;
+}
+.row-x:hover {
+  color: var(--danger-text);
+  background: var(--danger-bg);
+}
+.tbody .tr.row-deleting {
+  background: var(--danger-bg);
+  outline: 2px solid var(--danger-text);
+  outline-offset: -2px;
 }
 
 /* ---- edit modal (native <dialog>, auto-centred by the UA) ---- */

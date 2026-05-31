@@ -623,7 +623,7 @@ export function NotationEditor({
 
       <div className="actions">
         <button type="button" data-testid="save" disabled={!canSave} onClick={() => canSave && onSave(buildUpdated())}>
-          Save
+          Done
         </button>
         {onCancel && (
           <button type="button" onClick={onCancel}>

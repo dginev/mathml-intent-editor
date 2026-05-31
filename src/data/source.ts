@@ -1,6 +1,6 @@
 import { conceptId } from './conceptId';
 import { loadSeed } from './loadSeed';
-import { serializeConcepts } from './serialize';
+import { byConcept, serializeConcepts } from './serialize';
 import type { Concept } from '../types';
 
 /**
@@ -18,6 +18,8 @@ export type ConceptSource = {
   fetchRange(start: number, end: number): Promise<Concept[]>;
   /** Replace the row identified by `id` (`conceptId` it had when opened) with `updated`. */
   applyEdit(id: string, updated: Concept): void;
+  /** Insert a brand-new concept in canonical position. */
+  add(concept: Concept): void;
   /** Delete the row identified by `id`. */
   remove(id: string): void;
   /** Full backing-file content (W3C `open.yml` shape) for committing to GitHub. */
@@ -38,6 +40,11 @@ export function createSource(concepts: Concept[]): ConceptSource {
     applyEdit: (id, updated) => {
       const i = indexOf(id);
       if (i >= 0) all[i] = updated;
+    },
+    add: (concept) => {
+      const i = all.findIndex((c) => byConcept(concept, c) < 0); // first row that sorts after it
+      if (i < 0) all.push(concept);
+      else all.splice(i, 0, concept);
     },
     remove: (id) => {
       const i = indexOf(id);

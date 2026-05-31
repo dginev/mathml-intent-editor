@@ -37,6 +37,28 @@ const columns = [
     cell: (info) => <MathML markup={info.getValue()} className="mathml" />,
   }),
   columnHelper.accessor((c) => c.links.length, { id: 'links', header: 'Links', size: 70 }),
+  columnHelper.display({
+    id: 'actions',
+    header: '',
+    size: 44,
+    cell: ({ row, table }) => {
+      const onDelete = (table.options.meta as { onDelete?: (c: Concept) => void } | undefined)?.onDelete;
+      return (
+        <button
+          type="button"
+          className="row-x"
+          aria-label={`Delete ${row.original.slug}`}
+          title="Delete row"
+          onClick={(e) => {
+            e.stopPropagation(); // don't open the editor
+            onDelete?.(row.original);
+          }}
+        >
+          ✗
+        </button>
+      );
+    },
+  }),
 ];
 
 const ROW_HEIGHT = 40;
@@ -51,6 +73,8 @@ export function ConceptTable({
   onSelect,
   onLoadMore,
   editingId,
+  onDelete,
+  pendingDeleteId,
 }: {
   /** The rows loaded so far (a growing prefix of the full list). */
   data: Concept[];
@@ -61,6 +85,10 @@ export function ConceptTable({
   onLoadMore?: () => void;
   /** conceptId of the row being edited — highlighted and scrolled to centre while the modal is open. */
   editingId?: string | null;
+  /** Per-row delete (the ✗ button). */
+  onDelete?: (concept: Concept) => void;
+  /** conceptId of a row pending delete confirmation — flashed red while the confirm() dialog is up. */
+  pendingDeleteId?: string | null;
 }) {
   const table = useReactTable({
     data,
@@ -69,6 +97,7 @@ export function ConceptTable({
     globalFilterFn: conceptFilter,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    meta: { onDelete },
   });
 
   const rows = table.getRowModel().rows;
@@ -118,7 +147,9 @@ export function ConceptTable({
             const row = rows[vi.index];
             return (
               <div
-                className={`tr row-clickable${conceptId(row.original) === editingId ? ' row-editing' : ''}`}
+                className={`tr row-clickable${conceptId(row.original) === editingId ? ' row-editing' : ''}${
+                  conceptId(row.original) === pendingDeleteId ? ' row-deleting' : ''
+                }`}
                 key={row.id}
                 data-row-index={vi.index}
                 data-slug={row.original.slug}
