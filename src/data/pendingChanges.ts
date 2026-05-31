@@ -97,3 +97,27 @@ export function formatChangeSummary(s: ChangeSummary): string {
   if (s.deleted.length) parts.push(`deleted - ${s.deleted.join(', ')}`);
   return parts.length ? `${parts.join('; ')};` : '';
 }
+
+/** Long name lists get capped so a PR title stays short. */
+const capNames = (names: string[], max = 8): string =>
+  names.length > max ? `${names.slice(0, max).join(', ')}, +${names.length - max} more` : names.join(', ');
+
+/** A concise PR title from the changes, ending in the author: `add: a; edit: b; delete: c; by @handle`. */
+export function prTitle(s: ChangeSummary, handle: string): string {
+  const parts: string[] = [];
+  if (s.added.length) parts.push(`add: ${capNames(s.added)}`);
+  if (s.modified.length) parts.push(`edit: ${capNames(s.modified)}`);
+  if (s.deleted.length) parts.push(`delete: ${capNames(s.deleted)}`);
+  const by = `by @${handle}`;
+  return parts.length ? `${parts.join('; ')}; ${by}` : `dictionary update; ${by}`;
+}
+
+/** A brief Markdown PR description (the body), omitting empty categories — names as inline code. */
+export function markdownChangeSummary(s: ChangeSummary): string {
+  const line = (label: string, names: string[]): string | null =>
+    names.length ? `- **${label}** (${names.length}): ${names.map((n) => `\`${n}\``).join(', ')}` : null;
+  const rows = [line('Added', s.added), line('Modified', s.modified), line('Deleted', s.deleted)].filter(
+    (x): x is string => x !== null,
+  );
+  return rows.length ? `### Open concept changes\n\n${rows.join('\n')}` : '';
+}

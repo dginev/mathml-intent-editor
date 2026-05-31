@@ -341,6 +341,29 @@
   font-size: 0.8rem;
   color: var(--text-muted);
 }
+.save-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.7rem;
+}
+.save-field-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+/* Auto PR title — read-only preview, styled like an inert field. */
+.save-title {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-muted);
+  word-break: break-word;
+}
 .save-prompt textarea {
   width: 100%;
   box-sizing: border-box;
