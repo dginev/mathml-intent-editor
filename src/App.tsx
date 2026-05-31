@@ -5,10 +5,12 @@ import { loadEdits, saveEdits, clearEdits } from './data/editCache';
 import { conceptId } from './data/conceptId';
 import { byConcept, serializeConcepts } from './data/serialize';
 import {
+  changeSummary,
   classifyChange,
   computeEdits,
   deletedIdsFromEdits,
   effectiveYaml,
+  formatChangeSummary,
   type BaseMap,
   type ChangeKind,
 } from './data/pendingChanges';
@@ -72,11 +74,14 @@ export default function App() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null); // last Save failure → red button + toast
+  const [savePrompt, setSavePrompt] = useState(false); // the "describe your changes" confirm modal
+  const [saveMessage, setSaveMessage] = useState(''); // the (editable) PR/commit description
   // The PR the user's branch terminates in; when it closes/merges we reset the session and reload.
   const [activePr, setActivePr] = useState<ActivePr | null>(() => loadPr(localStorage));
   const [reloadKey, setReloadKey] = useState(0); // bump to force a fresh dictionary load
   const loadingRef = useRef(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const saveDialogRef = useRef<HTMLDialogElement>(null);
 
   // Drive the native modal dialog from `editing` (showModal centres + traps focus; close() on cancel).
   useEffect(() => {
@@ -85,6 +90,14 @@ export default function App() {
     if (editing && !d.open) d.showModal();
     else if (!editing && d.open) d.close();
   }, [editing]);
+
+  // Drive the "describe your changes" confirm dialog the same way.
+  useEffect(() => {
+    const d = saveDialogRef.current;
+    if (!d) return;
+    if (savePrompt && !d.open) d.showModal();
+    else if (!savePrompt && d.open) d.close();
+  }, [savePrompt]);
 
   // Config: backing repo (raw reads) and the auth+PR service. Either may be absent → graceful fallback.
   const repo = useMemo(() => repoConfigFromEnv(), []);
@@ -384,13 +397,25 @@ export default function App() {
     [baseMap, deletedIds],
   );
 
-  // Commit the whole batch to the service (bot → intent/<handle> branch + PR), when configured. On
-  // success the pushed content becomes the new baseline, so the session returns to a clean state.
-  const saveBatch = useCallback(() => {
+  const closeSavePrompt = useCallback(() => setSavePrompt(false), []);
+
+  // "Save" → open the confirm modal, pre-filling the description with an enumeration of the changes.
+  const openSavePrompt = useCallback(() => {
+    if (!source || !baseMap) return;
+    if (!gated()) return;
+    setSaveMessage(formatChangeSummary(changeSummary(source.all(), deletedIds, baseMap)));
+    setSavePrompt(true);
+  }, [source, baseMap, deletedIds, gated]);
+
+  // Submit the whole batch to the service (bot → intent/<handle> branch + PR), using the user's
+  // description as the commit message. On success the pushed content becomes the new baseline, so the
+  // session returns to a clean state.
+  const submitBatch = useCallback(() => {
     if (!source || baseline == null) return;
     if (!gated()) return;
     if (!service || !identity) return; // local-only: nothing to submit
     const content = effectiveYaml(source.all(), deletedIds);
+    const message = saveMessage.trim() || `Update open.yml (proposed by @${identity.handle})`;
     void (async () => {
       try {
         setSaving(true);
@@ -398,7 +423,7 @@ export default function App() {
         setSubmitState('Submitting…');
         const { prNumber, prUrl } = await submitToService(service.serviceUrl, identity.jwt, {
           content,
-          message: `Update open.yml (proposed by @${identity.handle})`,
+          message,
         });
         // Enact deletions, then adopt the pushed content as the new baseline (clean session).
         for (const id of deletedIds) source.remove(id);
@@ -426,9 +451,10 @@ export default function App() {
         setSubmitState(null); // drop the "Submitting…" status; the toast carries the error
       } finally {
         setSaving(false);
+        setSavePrompt(false); // close the confirm modal so the toast / red Save button are visible
       }
     })();
-  }, [source, baseline, deletedIds, gated, service, identity, expireSession]);
+  }, [source, baseline, deletedIds, gated, service, identity, saveMessage, expireSession]);
 
   const dismissSaveError = useCallback(() => setSaveError(null), []);
 
@@ -519,7 +545,7 @@ export default function App() {
                       className={`save-batch${saveError ? ' error' : ''}`}
                       data-testid="save-batch"
                       disabled={!dirty || saving}
-                      onClick={saveBatch}
+                      onClick={openSavePrompt}
                       title={
                         saveError ?? (dirty ? 'Submit all pending changes as one PR' : 'No pending changes')
                       }
@@ -563,6 +589,49 @@ export default function App() {
             />
           </Suspense>
         )}
+      </dialog>
+
+      {/* "Describe your changes" confirm modal — its text becomes the PR commit message. */}
+      <dialog
+        ref={saveDialogRef}
+        className="modal save-modal"
+        aria-label="Describe your changes"
+        onClose={closeSavePrompt}
+        onClick={(e) => {
+          if (e.target === saveDialogRef.current) closeSavePrompt();
+        }}
+      >
+        <div className="save-prompt">
+          <h2>Describe your changes</h2>
+          <p className="save-prompt-hint">This becomes the pull request’s commit message. Edit as you like.</p>
+          <textarea
+            data-testid="save-message"
+            aria-label="Change description"
+            rows={6}
+            value={saveMessage}
+            onChange={(e) => setSaveMessage(e.target.value)}
+          />
+          <div className="actions">
+            <button
+              type="button"
+              className="primary"
+              data-testid="save-confirm"
+              disabled={saving || saveMessage.trim() === ''}
+              onClick={submitBatch}
+            >
+              {saving ? (
+                <>
+                  <span className="spinner" aria-hidden="true" /> Submitting…
+                </>
+              ) : (
+                'Submit pull request'
+              )}
+            </button>
+            <button type="button" onClick={closeSavePrompt} disabled={saving}>
+              Cancel
+            </button>
+          </div>
+        </div>
       </dialog>
 
       {saveError && <Toast message={saveError} onClose={dismissSaveError} />}

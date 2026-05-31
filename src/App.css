@@ -328,6 +328,63 @@
   background: rgba(0, 0, 0, 0.5);
 }
 
+/* "Describe your changes" confirm modal — narrower than the row editor. */
+.modal.save-modal {
+  width: min(560px, 94vw);
+}
+.save-prompt h2 {
+  font-size: 1rem;
+  margin: 0 0 0.4rem;
+}
+.save-prompt-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.save-prompt textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+  resize: vertical;
+}
+.save-prompt .actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.8rem;
+}
+.save-prompt .actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+.save-prompt .actions .primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.save-prompt .actions .primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.save-prompt .actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ---- notation editor ---- */
 .fields {
   display: grid;
