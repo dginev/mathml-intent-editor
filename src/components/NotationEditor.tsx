@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { texToIntent } from '../render/intent';
+import { missingSpeechRefs, texToIntent } from '../render/intent';
 import { loadTemml, type TemmlEngine } from '../render/temmlEngine';
 import { MathML } from './MathML';
+import { MathMLSource } from './MathMLSource';
 import type { Concept } from '../types';
 
 const lines = (s: string): string[] =>
@@ -53,6 +54,18 @@ export function NotationEditor({
   const texBlocks = hasTex && (!engine || !result?.ok); // TeX present but not yet valid → can't save
   const canSave = slug.trim() !== '' && !texBlocks;
 
+  // The MathML that will be saved as the primary notation: the freshly rendered TeX, or (TeX blank)
+  // the concept's existing first rendering. Drives both previews and the speech/notation validation.
+  const effectiveMathml = hasTex
+    ? result?.ok
+      ? `<math>${result.mathml}</math>`
+      : null
+    : (concept.mathml[0] ?? null);
+  const missingRefs = useMemo(
+    () => (effectiveMathml ? missingSpeechRefs(en, effectiveMathml) : []),
+    [en, effectiveMathml],
+  );
+
   const buildUpdated = (): Concept => {
     const mathml =
       hasTex && result?.ok
@@ -88,10 +101,6 @@ export function NotationEditor({
           <span>Arity</span>
           <input type="number" min={0} value={arity} onChange={(e) => setArity(e.target.value)} />
         </label>
-        <label className="field field-wide">
-          <span>Speech (en)</span>
-          <input value={en} onChange={(e) => setEn(e.target.value)} />
-        </label>
         <label className="field">
           <span>Area</span>
           <input value={area} onChange={(e) => setArea(e.target.value)} />
@@ -101,6 +110,31 @@ export function NotationEditor({
           <input value={property} onChange={(e) => setProperty(e.target.value)} />
         </label>
       </div>
+
+      {/* Speech + Notation sit together: speech $refs must be marked as args in the notation. */}
+      <div className="pair">
+        <label className="field">
+          <span>Speech (en)</span>
+          <textarea value={en} spellCheck={false} rows={2} onChange={(e) => setEn(e.target.value)} />
+        </label>
+        <label className="field">
+          <span>Notation — TeX (blank keeps current MathML)</span>
+          <textarea
+            data-testid="tex-input"
+            value={tex}
+            spellCheck={false}
+            rows={2}
+            placeholder={'-\\arg{x}{n}'}
+            onChange={(e) => setTex(e.target.value)}
+          />
+        </label>
+      </div>
+
+      {missingRefs.length > 0 && (
+        <p className="warn" role="status" data-testid="ref-warning">
+          Speech references not marked in the notation: {missingRefs.join(', ')}
+        </p>
+      )}
 
       <table className="legend">
         <thead>
@@ -141,56 +175,51 @@ export function NotationEditor({
         </tbody>
       </table>
 
-      <label className="field">
-        <span>Notation — TeX (leave blank to keep the current MathML)</span>
-        <textarea
-          data-testid="tex-input"
-          value={tex}
-          spellCheck={false}
-          rows={2}
-          placeholder={'-\\arg{x}{n}'}
-          onChange={(e) => setTex(e.target.value)}
-        />
-      </label>
+      {hasTex && result && !result.ok ? (
+        <span className="error" role="alert" data-testid="error">
+          {result.error}
+        </span>
+      ) : (
+        <div className="previews">
+          <div className="preview-cell">
+            <span className="preview-label">Rendered</span>
+            {effectiveMathml ? (
+              <MathML className="preview" markup={effectiveMathml} data-testid="preview" />
+            ) : (
+              <span className="hint">{hasTex ? 'Loading renderer…' : 'no notation'}</span>
+            )}
+          </div>
+          <div className="preview-cell">
+            <span className="preview-label">MathML source</span>
+            {effectiveMathml ? (
+              <MathMLSource markup={effectiveMathml} />
+            ) : (
+              <span className="hint">—</span>
+            )}
+          </div>
+        </div>
+      )}
 
-      <div className="preview-row">
-        <span className="preview-label">Preview</span>
-        {hasTex ? (
-          !result ? (
-            <span className="hint">Loading renderer…</span>
-          ) : result.ok ? (
-            <MathML className="preview" markup={result.mathml} data-testid="preview" />
-          ) : (
-            <span className="error" role="alert" data-testid="error">
-              {result.error}
-            </span>
-          )
-        ) : concept.mathml[0] ? (
-          <MathML className="preview" markup={concept.mathml[0]} data-testid="preview" />
-        ) : (
-          <span className="hint">no notation</span>
-        )}
+      <div className="pair">
+        <label className="field">
+          <span>Links — one URL per line</span>
+          <textarea
+            value={linksText}
+            spellCheck={false}
+            rows={2}
+            onChange={(e) => setLinksText(e.target.value)}
+          />
+        </label>
+        <label className="field">
+          <span>Aliases — one per line</span>
+          <textarea
+            value={aliasText}
+            spellCheck={false}
+            rows={2}
+            onChange={(e) => setAliasText(e.target.value)}
+          />
+        </label>
       </div>
-
-      <label className="field">
-        <span>Links — one URL per line</span>
-        <textarea
-          value={linksText}
-          spellCheck={false}
-          rows={2}
-          onChange={(e) => setLinksText(e.target.value)}
-        />
-      </label>
-
-      <label className="field">
-        <span>Aliases — one per line</span>
-        <textarea
-          value={aliasText}
-          spellCheck={false}
-          rows={2}
-          onChange={(e) => setAliasText(e.target.value)}
-        />
-      </label>
 
       <div className="actions">
         <button type="button" data-testid="save" disabled={!canSave} onClick={() => canSave && onSave(buildUpdated())}>
