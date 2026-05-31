@@ -39,8 +39,9 @@ node --env-file=.env src/server.js
    ```
 2. **Code + deps:**
    ```sh
-   mkdir -p /opt/mathml-intent-service && rsync -a service/ /opt/mathml-intent-service/   # or git clone + cd service
-   cd /opt/mathml-intent-service && npm install --omit=dev
+   mkdir -p /opt/mathml-intent/service && rsync -a --exclude node_modules service/ /opt/mathml-intent/service/
+   cd /opt/mathml-intent/service && npm install --omit=dev
+   # redeploy (code-only): rsync -avz --exclude node_modules --exclude .git service/ root@latexml.rs:/opt/mathml-intent/service/ && ssh root@latexml.rs systemctl restart mathml-intent
    ```
 3. **Secrets** (root-only):
    ```sh
@@ -58,7 +59,7 @@ node --env-file=.env src/server.js
    After=network.target
 
    [Service]
-   WorkingDirectory=/opt/mathml-intent-service
+   WorkingDirectory=/opt/mathml-intent/service
    EnvironmentFile=/etc/mathml-intent/service.env
    ExecStart=/usr/bin/node src/server.js
    Restart=always
