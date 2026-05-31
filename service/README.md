@@ -10,10 +10,12 @@ PRs as our controlled bot (a GitHub App installation). Deployed on the `latexml.
   still-valid token and re-issue a fresh-TTL one (no GitHub round-trip). An expired token can't renew
   (→ 401), so an absence longer than the TTL forces a re-auth. The client calls this on each visit once
   the token has aged past its first day.
-- `POST /submit` (`Authorization: Bearer <jwt>`, body `{ content, message? }`) → `{ prNumber, prUrl }`
-  — verify the JWT, then as the bot commit `content` to `intent/<handle>` and ensure the PR is open. If
-  the branch has no open PR (its last one was closed/merged), the stale branch is dropped first so the
-  new PR is cut off the current base.
+- `POST /submit` (`Authorization: Bearer <jwt>`, body `{ content, message?, title?, description? }`) →
+  `{ prNumber, prUrl }` — verify the JWT, then as the bot commit `content` to `intent/<handle>` (commit
+  message `message`) and ensure the PR is open, setting its **title** and **Markdown body** from
+  `title`/`description` (attribution footer appended; refreshed on each submit). If the branch has no
+  open PR (its last one was closed/merged), the stale branch is dropped first so the new PR is cut off
+  the current base.
 - `POST /reset` (`Authorization: Bearer <jwt>`) → `{ deleted }` — verify the JWT, then as the bot delete
   the caller's `intent/<handle>` branch (no-op if absent). The client calls this when it detects its PR
   was closed/merged, so the next edit starts a fresh branch.

@@ -231,8 +231,11 @@ The earlier "user opens the PR with their own token" model was replaced. The agr
 - **Identity is a prerequisite to edit.** Sign-in resolves the contributor's GitHub `@handle` before
   any editing is possible. Identity is used for attribution, *not* for pushing.
 - **Bot opens the PRs via a single GitHub App.** One GitHub App does both: user-to-server OAuth (to
-  read the `@handle`) and an installation token (to commit as our controlled account). Attribution is a
-  "Proposed by @handle" line in the **PR body** (bot is the commit author).
+  read the `@handle`) and an installation token (to commit as our controlled account). The PR **title**
+  (`add: …; edit: …; by @handle`) and **Markdown description** are auto-generated client-side from the
+  change set in the "Describe your changes" Save modal (`prTitle`/`markdownChangeSummary` in
+  `pendingChanges.ts`) and sent to `/submit`; the bot appends a "Proposed by @handle" attribution footer
+  to the body (bot is the commit author).
 - **Backend = a Node/Fastify microservice on the `latexml.rs` VM**, behind the VM's existing **Caddy**
   (auto-HTTPS + CORS for the Pages origin). Stateless **JWT** sessions (no session store), a sliding
   **7-day** TTL. Endpoints: `/auth` (OAuth code → verified handle → JWT), `/renew` (verify a valid JWT →

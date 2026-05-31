@@ -5,7 +5,7 @@
 export async function submitToService(
   serviceUrl: string,
   jwt: string,
-  edit: { content: string; message: string },
+  edit: { content: string; message: string; title?: string; description?: string },
   fetchImpl: typeof fetch = fetch,
 ): Promise<{ prNumber: number; prUrl: string }> {
   const res = await fetchImpl(`${serviceUrl}/submit`, {

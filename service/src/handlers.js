@@ -38,7 +38,13 @@ export function createHandlers(deps) {
       }
       if (!body || typeof body.content !== 'string') throw fail(400, 'missing content');
       const message = body.message || `Update open.yml (proposed by @${handle})`;
-      return deps.submit({ handle, content: body.content, message });
+      return deps.submit({
+        handle,
+        content: body.content,
+        message,
+        title: body.title,
+        description: body.description,
+      });
     },
 
     /** POST /reset — verify identity, then the bot deletes the caller's stale `intent/<handle>` branch. */

@@ -11,6 +11,8 @@ import {
   deletedIdsFromEdits,
   effectiveYaml,
   formatChangeSummary,
+  markdownChangeSummary,
+  prTitle,
   type BaseMap,
   type ChangeKind,
 } from './data/pendingChanges';
@@ -75,7 +77,8 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null); // last Save failure → red button + toast
   const [savePrompt, setSavePrompt] = useState(false); // the "describe your changes" confirm modal
-  const [saveMessage, setSaveMessage] = useState(''); // the (editable) PR/commit description
+  const [saveTitle, setSaveTitle] = useState(''); // auto PR title (read-only preview)
+  const [saveMessage, setSaveMessage] = useState(''); // the (editable) Markdown PR description
   // The PR the user's branch terminates in; when it closes/merges we reset the session and reload.
   const [activePr, setActivePr] = useState<ActivePr | null>(() => loadPr(localStorage));
   const [reloadKey, setReloadKey] = useState(0); // bump to force a fresh dictionary load
@@ -399,23 +402,27 @@ export default function App() {
 
   const closeSavePrompt = useCallback(() => setSavePrompt(false), []);
 
-  // "Save" → open the confirm modal, pre-filling the description with an enumeration of the changes.
+  // "Save" → open the confirm modal: auto-generate the PR title + a Markdown description of the changes.
   const openSavePrompt = useCallback(() => {
     if (!source || !baseMap) return;
     if (!gated()) return;
-    setSaveMessage(formatChangeSummary(changeSummary(source.all(), deletedIds, baseMap)));
+    const summary = changeSummary(source.all(), deletedIds, baseMap);
+    setSaveTitle(prTitle(summary, identity?.handle ?? 'me'));
+    setSaveMessage(markdownChangeSummary(summary));
     setSavePrompt(true);
-  }, [source, baseMap, deletedIds, gated]);
+  }, [source, baseMap, deletedIds, gated, identity]);
 
   // Submit the whole batch to the service (bot → intent/<handle> branch + PR), using the user's
   // description as the commit message. On success the pushed content becomes the new baseline, so the
   // session returns to a clean state.
   const submitBatch = useCallback(() => {
-    if (!source || baseline == null) return;
+    if (!source || baseline == null || !baseMap) return;
     if (!gated()) return;
     if (!service || !identity) return; // local-only: nothing to submit
     const content = effectiveYaml(source.all(), deletedIds);
-    const message = saveMessage.trim() || `Update open.yml (proposed by @${identity.handle})`;
+    const summary = changeSummary(source.all(), deletedIds, baseMap);
+    const description = saveMessage.trim() || markdownChangeSummary(summary); // the Markdown PR body
+    const message = formatChangeSummary(summary) || `Update open.yml (proposed by @${identity.handle})`;
     void (async () => {
       try {
         setSaving(true);
@@ -424,6 +431,8 @@ export default function App() {
         const { prNumber, prUrl } = await submitToService(service.serviceUrl, identity.jwt, {
           content,
           message,
+          title: saveTitle,
+          description,
         });
         // Enact deletions, then adopt the pushed content as the new baseline (clean session).
         for (const id of deletedIds) source.remove(id);
@@ -454,7 +463,7 @@ export default function App() {
         setSavePrompt(false); // close the confirm modal so the toast / red Save button are visible
       }
     })();
-  }, [source, baseline, deletedIds, gated, service, identity, saveMessage, expireSession]);
+  }, [source, baseline, baseMap, deletedIds, gated, service, identity, saveTitle, saveMessage, expireSession]);
 
   const dismissSaveError = useCallback(() => setSaveError(null), []);
 
@@ -603,14 +612,26 @@ export default function App() {
       >
         <div className="save-prompt">
           <h2>Describe your changes</h2>
-          <p className="save-prompt-hint">This becomes the pull request’s commit message. Edit as you like.</p>
-          <textarea
-            data-testid="save-message"
-            aria-label="Change description"
-            rows={6}
-            value={saveMessage}
-            onChange={(e) => setSaveMessage(e.target.value)}
-          />
+          <p className="save-prompt-hint">
+            Opens/updates the GitHub pull request against the W3C Intent dictionary. The description is
+            rendered as Markdown.
+          </p>
+          <div className="save-field">
+            <span className="save-field-label">Pull request title</span>
+            <div className="save-title" data-testid="save-title">
+              {saveTitle}
+            </div>
+          </div>
+          <label className="save-field">
+            <span className="save-field-label">Description (Markdown)</span>
+            <textarea
+              data-testid="save-message"
+              aria-label="Change description"
+              rows={7}
+              value={saveMessage}
+              onChange={(e) => setSaveMessage(e.target.value)}
+            />
+          </label>
           <div className="actions">
             <button
               type="button"

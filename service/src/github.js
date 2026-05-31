@@ -64,12 +64,20 @@ async function fileSha(octokit, owner, repo, path, ref) {
   }
 }
 
-async function ensurePullRequest(octokit, owner, repo, baseBranch, branch, handle) {
-  const title = `Intent dictionary updates from @${handle}`;
-  const body = `Proposed by @${handle} via the MathML Intent Open Editor.`;
+/** PR title + Markdown body, with the editor's attribution appended as a footer. */
+function prMeta(handle, title, description) {
+  const finalTitle = (title || '').trim() || `Intent dictionary updates from @${handle}`;
+  const attribution = `_Proposed by @${handle} via the MathML Intent Open Editor._`;
+  const desc = (description || '').trim();
+  const body = desc ? `${desc}\n\n---\n${attribution}` : attribution;
+  return { title: finalTitle, body };
+}
+
+async function ensurePullRequest(octokit, owner, repo, baseBranch, branch, handle, title, description) {
+  const meta = prMeta(handle, title, description);
   try {
     const res = await octokit.request('POST /repos/{owner}/{repo}/pulls', {
-      owner, repo, title, head: branch, base: baseBranch, body,
+      owner, repo, title: meta.title, head: branch, base: baseBranch, body: meta.body,
     });
     return res.data;
   } catch (e) {
@@ -78,7 +86,16 @@ async function ensurePullRequest(octokit, owner, repo, baseBranch, branch, handl
       owner, repo, head: `${owner}:${branch}`, state: 'open',
     });
     if (existing.data.length === 0) throw e;
-    return existing.data[0];
+    const pr = existing.data[0];
+    try {
+      // refresh the title + description to reflect the latest batch (best-effort)
+      await octokit.request('PATCH /repos/{owner}/{repo}/pulls/{pull_number}', {
+        owner, repo, pull_number: pr.number, title: meta.title, body: meta.body,
+      });
+    } catch {
+      /* keep the PR even if updating its title/description fails */
+    }
+    return pr;
   }
 }
 
@@ -108,7 +125,7 @@ async function deleteBranch(octokit, owner, repo, branch) {
  * minimal. An open PR is left in place and pushing onto it auto-updates it. Returns `{ prNumber, prUrl }`.
  */
 export function makeSubmit({ octokit, owner, repo, baseBranch, filePath }) {
-  return async function submit({ handle, content, message }) {
+  return async function submit({ handle, content, message, title, description }) {
     const branch = `intent/${handle}`;
     if (!(await openPrFor(octokit, owner, repo, branch))) await deleteBranch(octokit, owner, repo, branch);
     await ensureBranch(octokit, owner, repo, baseBranch, branch);
@@ -121,7 +138,7 @@ export function makeSubmit({ octokit, owner, repo, baseBranch, filePath }) {
       branch,
       sha: await fileSha(octokit, owner, repo, filePath, branch),
     });
-    const pr = await ensurePullRequest(octokit, owner, repo, baseBranch, branch, handle);
+    const pr = await ensurePullRequest(octokit, owner, repo, baseBranch, branch, handle, title, description);
     return { prNumber: pr.number, prUrl: pr.html_url };
   };
 }

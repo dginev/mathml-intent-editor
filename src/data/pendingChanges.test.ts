@@ -7,6 +7,8 @@ import {
   deletedIdsFromEdits,
   effectiveYaml,
   formatChangeSummary,
+  markdownChangeSummary,
+  prTitle,
 } from './pendingChanges';
 import { conceptId } from './conceptId';
 import type { Concept } from '../types';
@@ -91,6 +93,20 @@ describe('changeSummary / formatChangeSummary', () => {
     );
     expect(formatChangeSummary({ added: [], modified: ['power'], deleted: [] })).toBe('modified - power;');
     expect(formatChangeSummary({ added: [], modified: [], deleted: [] })).toBe('');
+  });
+
+  it('prTitle is concise and ends in the author (empty categories omitted)', () => {
+    expect(prTitle({ added: ['additive-inverse'], modified: ['abelian-group'], deleted: [] }, 'dginev')).toBe(
+      'add: additive-inverse; edit: abelian-group; by @dginev',
+    );
+    expect(prTitle({ added: [], modified: [], deleted: ['foo'] }, 'dginev')).toBe('delete: foo; by @dginev');
+  });
+
+  it('markdownChangeSummary is a brief markdown body with inline-code names', () => {
+    expect(
+      markdownChangeSummary({ added: ['a', 'b'], modified: ['c'], deleted: [] }),
+    ).toBe('### Open concept changes\n\n- **Added** (2): `a`, `b`\n- **Modified** (1): `c`');
+    expect(markdownChangeSummary({ added: [], modified: [], deleted: [] })).toBe('');
   });
 });
 
