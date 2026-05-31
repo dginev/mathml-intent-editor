@@ -64,3 +64,36 @@ export function computeEdits(
 export function deletedIdsFromEdits(edits: EditCache, baseMap: BaseMap): Set<string> {
   return new Set(Object.keys(edits).filter((id) => edits[id].value === null && baseMap.has(id)));
 }
+
+export type ChangeSummary = { added: string[]; modified: string[]; deleted: string[] };
+
+/** Concept names changed vs the baseline, grouped by kind (sorted, de-duplicated by slug). */
+export function changeSummary(
+  all: readonly Concept[],
+  deletedIds: ReadonlySet<string>,
+  baseMap: BaseMap,
+): ChangeSummary {
+  const added = new Set<string>();
+  const modified = new Set<string>();
+  for (const c of all) {
+    const kind = classifyChange(c, baseMap, deletedIds);
+    if (kind === 'added') added.add(c.slug);
+    else if (kind === 'changed') modified.add(c.slug);
+  }
+  const deleted = new Set<string>();
+  for (const id of deletedIds) {
+    const base = baseMap.get(id);
+    if (base) deleted.add(base.slug);
+  }
+  const sorted = (s: Set<string>) => [...s].sort();
+  return { added: sorted(added), modified: sorted(modified), deleted: sorted(deleted) };
+}
+
+/** One-line human summary, omitting empty categories: `added - a, b; modified - c; deleted - d;`. */
+export function formatChangeSummary(s: ChangeSummary): string {
+  const parts: string[] = [];
+  if (s.added.length) parts.push(`added - ${s.added.join(', ')}`);
+  if (s.modified.length) parts.push(`modified - ${s.modified.join(', ')}`);
+  if (s.deleted.length) parts.push(`deleted - ${s.deleted.join(', ')}`);
+  return parts.length ? `${parts.join('; ')};` : '';
+}

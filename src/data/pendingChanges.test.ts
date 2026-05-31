@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
-import { classifyChange, computeEdits, deletedIdsFromEdits, effectiveYaml } from './pendingChanges';
+import {
+  changeSummary,
+  classifyChange,
+  computeEdits,
+  deletedIdsFromEdits,
+  effectiveYaml,
+  formatChangeSummary,
+} from './pendingChanges';
 import { conceptId } from './conceptId';
 import type { Concept } from '../types';
 
@@ -60,6 +67,30 @@ describe('computeEdits', () => {
 
   it('produces an empty cache when the working set matches the baseline', () => {
     expect(computeEdits([c('power'), c('sum')], new Set(), baseMap)).toEqual({});
+  });
+});
+
+describe('changeSummary / formatChangeSummary', () => {
+  const baseMap = mapOf(c('power'), c('sum'), c('ratio'));
+
+  it('groups added / modified / deleted concept names (sorted, de-duplicated)', () => {
+    const all = [
+      c('alpha'), // added
+      c('beta'), // added
+      c('power', '<math><mi>z</mi></math>'), // modified
+      c('sum'), // unchanged
+      c('ratio'), // held for display but pending-deleted (below)
+    ];
+    const summary = changeSummary(all, new Set(['ratio#']), baseMap);
+    expect(summary).toEqual({ added: ['alpha', 'beta'], modified: ['power'], deleted: ['ratio'] });
+  });
+
+  it('formats only the non-empty categories', () => {
+    expect(formatChangeSummary({ added: ['alpha', 'beta'], modified: ['power'], deleted: ['ratio'] })).toBe(
+      'added - alpha, beta; modified - power; deleted - ratio;',
+    );
+    expect(formatChangeSummary({ added: [], modified: ['power'], deleted: [] })).toBe('modified - power;');
+    expect(formatChangeSummary({ added: [], modified: [], deleted: [] })).toBe('');
   });
 });
 
