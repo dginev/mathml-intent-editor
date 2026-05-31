@@ -44,11 +44,12 @@ export function createHandlers(deps) {
         message,
         title: body.title,
         description: body.description,
+        branch: body.branch,
       });
     },
 
-    /** POST /reset — verify identity, then the bot deletes the caller's stale `intent/<handle>` branch. */
-    async reset({ authorization }) {
+    /** POST /reset — verify identity, then the bot deletes the caller's (closed-PR) working branch. */
+    async reset({ authorization, body }) {
       const jwt = (authorization || '').replace(/^Bearer\s+/i, '');
       let handle;
       try {
@@ -56,7 +57,7 @@ export function createHandlers(deps) {
       } catch {
         throw fail(401, 'invalid session');
       }
-      return deps.reset({ handle });
+      return deps.reset({ handle, branch: body?.branch });
     },
 
     /**

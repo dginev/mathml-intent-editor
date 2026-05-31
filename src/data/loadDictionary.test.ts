@@ -59,9 +59,9 @@ describe('loadDictionary', () => {
     expect(conflicts).toEqual(['power#']);
   });
 
-  it('reads the user branch when a handle is given', async () => {
+  it('reads the user branch when one is given', async () => {
     const { concepts } = await loadDictionary(
-      args({ handle: 'dginev', fetchImpl: fetchFor({ power: 'p' }, { power: 'p', extra: 'e' }) }),
+      args({ branch: 'intent/dginev', fetchImpl: fetchFor({ power: 'p' }, { power: 'p', extra: 'e' }) }),
     );
     expect(concepts.map((c) => c.slug)).toContain('extra');
   });

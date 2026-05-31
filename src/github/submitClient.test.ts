@@ -40,12 +40,13 @@ describe('resetSession', () => {
       json: async () => ({ deleted: true }),
     })) as unknown as typeof fetch;
 
-    const out = await resetSession('https://svc.example', 'jwt123', fetchImpl);
+    const out = await resetSession('https://svc.example', 'jwt123', 'dginev-20260531-power', fetchImpl);
 
     expect(out).toEqual({ deleted: true });
     const [url, init] = (fetchImpl as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0];
     expect(url).toBe('https://svc.example/reset');
     expect(init.method).toBe('POST');
     expect((init.headers as Record<string, string>).authorization).toBe('Bearer jwt123');
+    expect(JSON.parse(init.body as string)).toEqual({ branch: 'dginev-20260531-power' });
   });
 });

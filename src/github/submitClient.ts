@@ -5,7 +5,7 @@
 export async function submitToService(
   serviceUrl: string,
   jwt: string,
-  edit: { content: string; message: string; title?: string; description?: string },
+  edit: { content: string; message: string; title?: string; description?: string; branch?: string },
   fetchImpl: typeof fetch = fetch,
 ): Promise<{ prNumber: number; prUrl: string }> {
   const res = await fetchImpl(`${serviceUrl}/submit`, {
@@ -27,11 +27,13 @@ export async function submitToService(
 export async function resetSession(
   serviceUrl: string,
   jwt: string,
+  branch?: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<{ deleted: boolean }> {
   const res = await fetchImpl(`${serviceUrl}/reset`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${jwt}` },
+    headers: { authorization: `Bearer ${jwt}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ branch }),
   });
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };

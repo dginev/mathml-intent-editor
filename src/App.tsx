@@ -34,7 +34,7 @@ import {
 } from './github/auth';
 import { repoConfigFromEnv, serviceConfigFromEnv } from './github/config';
 import { resetSession, submitToService } from './github/submitClient';
-import { clearPr, fetchPullState, loadPr, savePr, type ActivePr } from './github/prSession';
+import { clearPr, fetchPullState, loadPr, newBranchName, savePr, type ActivePr } from './github/prSession';
 import type { Concept } from './types';
 import './App.css';
 
@@ -115,7 +115,6 @@ export default function App() {
   const [authPending, setAuthPending] = useState(
     () => !!(serviceConfigFromEnv() && parseCallback(window.location.search)),
   );
-  const handle = identity?.handle ?? null;
 
   // Complete the OAuth redirect (?code=…&state=…): verify state, exchange via /auth, store identity.
   useEffect(() => {
@@ -136,7 +135,7 @@ export default function App() {
       .finally(() => setAuthPending(false));
   }, [service]);
 
-  // Load the dictionary. Reloads when the signed-in handle changes (to read the user's branch).
+  // Load the dictionary. `reloadKey` is bumped to force a fresh load (sign-out, PR-close reset).
   useEffect(() => {
     let live = true;
     const done = (s: ConceptSource, base: Concept[], deleted: Set<string>, c: string[] = []) => {
@@ -152,7 +151,7 @@ export default function App() {
       setDirty(effectiveYaml(s.all(), deleted) !== baselineStr); // leftover unsaved edits → already dirty
     };
     if (repo) {
-      loadDictionary({ ...repo, handle, edits: loadEdits(localStorage) })
+      loadDictionary({ ...repo, branch: loadPr(localStorage)?.branch ?? null, edits: loadEdits(localStorage) })
         .then(({ concepts, conflicts, base }) => {
           const bMap = new Map(base.map((x) => [conceptId(x), x]));
           const deleted = deletedIdsFromEdits(loadEdits(localStorage), bMap);
@@ -169,7 +168,7 @@ export default function App() {
     return () => {
       live = false;
     };
-  }, [repo, handle, reloadKey]);
+  }, [repo, reloadKey]);
 
   // When the user's working PR is closed or merged, end the session: ask the service to delete the
   // (now stale) intent/<handle> branch, drop local edits, and reload clean from the base branch. Checked
@@ -178,7 +177,7 @@ export default function App() {
     if (!service || !repo || !identity || !activePr) return;
     if ((await fetchPullState(repo.owner, repo.repo, activePr.number)) !== 'closed') return;
     try {
-      await resetSession(service.serviceUrl, identity.jwt); // delete the branch (best-effort)
+      await resetSession(service.serviceUrl, identity.jwt, activePr.branch); // delete the closed branch (best-effort)
     } catch {
       /* lazy cleanup on the next /submit covers a failed reset */
     }
@@ -234,6 +233,7 @@ export default function App() {
     setActivePr(null);
     setIdentity(null);
     setSubmitState(null);
+    setReloadKey((k) => k + 1); // reload from base — drop the branch-reconciled view
   }, []);
 
   // Drop an expired/invalid session (keeping the PR pointer + local edits): the UI returns to
@@ -423,6 +423,9 @@ export default function App() {
     const summary = changeSummary(source.all(), deletedIds, baseMap);
     const description = saveMessage.trim() || markdownChangeSummary(summary); // the Markdown PR body
     const message = formatChangeSummary(summary) || `Update open.yml (proposed by @${identity.handle})`;
+    // Reuse the open PR's branch (a new commit updates it); otherwise mint a fresh unique branch.
+    const firstConcept = [...summary.added, ...summary.modified, ...summary.deleted].sort()[0] ?? 'update';
+    const branch = activePr ? activePr.branch : newBranchName(identity.handle, firstConcept, new Date());
     void (async () => {
       try {
         setSaving(true);
@@ -433,6 +436,7 @@ export default function App() {
           message,
           title: saveTitle,
           description,
+          branch,
         });
         // Enact deletions, then adopt the pushed content as the new baseline (clean session).
         for (const id of deletedIds) source.remove(id);
@@ -443,10 +447,11 @@ export default function App() {
         setDeletedIds(new Set());
         setDirty(false);
         saveEdits(localStorage, {});
-        savePr(localStorage, { number: prNumber, url: prUrl }); // track it so we can detect closure
-        setActivePr({ number: prNumber, url: prUrl });
-        setSubmitState(`PR #${prNumber}`);
-        window.open(prUrl, '_blank', 'noopener');
+        const isNewPr = !activePr || activePr.number !== prNumber;
+        savePr(localStorage, { number: prNumber, url: prUrl, branch }); // track it so we can detect closure
+        setActivePr({ number: prNumber, url: prUrl, branch });
+        setSubmitState(isNewPr ? `PR #${prNumber}` : `PR #${prNumber} updated`);
+        if (isNewPr) window.open(prUrl, '_blank', 'noopener'); // updates land on the same PR — no new tab
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         // 401 = the service rejected our session token (expired/invalid) — sign out so the UI reflects
@@ -463,7 +468,7 @@ export default function App() {
         setSavePrompt(false); // close the confirm modal so the toast / red Save button are visible
       }
     })();
-  }, [source, baseline, baseMap, deletedIds, gated, service, identity, saveTitle, saveMessage, expireSession]);
+  }, [source, baseline, baseMap, deletedIds, gated, service, identity, activePr, saveTitle, saveMessage, expireSession]);
 
   const dismissSaveError = useCallback(() => setSaveError(null), []);
 
