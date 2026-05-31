@@ -117,7 +117,7 @@ export function NotationEditor({
             </td>
             <td>mark an argument</td>
             <td>
-              <code>{'-\\arg{x}{n}'}</code>
+              <code>{'\\arg{argname}{value}'}</code>
             </td>
           </tr>
           <tr>
