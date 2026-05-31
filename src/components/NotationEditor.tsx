@@ -35,6 +35,10 @@ export function NotationEditor({
   const [tex, setTex] = useState(concept.tex ?? '');
   const [linksText, setLinksText] = useState(concept.links.join('\n'));
   const [aliasText, setAliasText] = useState(concept.alias.join('\n'));
+  const [showLegend, setShowLegend] = useState(false);
+  // Notation is authored EITHER as TeX (rendered to MathML) OR as raw MathML, seeded with the current.
+  const [mode, setMode] = useState<'tex' | 'mathml'>('tex');
+  const [rawMathml, setRawMathml] = useState(concept.mathml[0] ?? '');
 
   const [engine, setEngine] = useState<TemmlEngine | null>(null);
   useEffect(() => {
@@ -46,31 +50,43 @@ export function NotationEditor({
   }, []);
 
   const hasTex = tex.trim() !== '';
-  // Authoring TeX overwrites the primary notation; the intent name comes from the (editable) slug.
-  const result = useMemo(
+  // TeX mode: render to MathML (intent name comes from the editable slug).
+  const texResult = useMemo(
     () => (engine && hasTex ? texToIntent(engine, tex, slug) : null),
     [engine, hasTex, tex, slug],
   );
-  const texBlocks = hasTex && (!engine || !result?.ok); // TeX present but not yet valid → can't save
-  const canSave = slug.trim() !== '' && !texBlocks;
+  // Raw mode: check the typed MathML is well-formed XML.
+  const rawError = useMemo(() => {
+    if (mode !== 'mathml' || rawMathml.trim() === '') return null;
+    const doc = new DOMParser().parseFromString(rawMathml, 'application/xml');
+    return doc.querySelector('parsererror') ? 'Malformed XML / MathML' : null;
+  }, [mode, rawMathml]);
 
-  // The MathML that will be saved as the primary notation: the freshly rendered TeX, or (TeX blank)
-  // the concept's existing first rendering. Drives both previews and the speech/notation validation.
-  const effectiveMathml = hasTex
-    ? result?.ok
-      ? `<math>${result.mathml}</math>`
-      : null
-    : (concept.mathml[0] ?? null);
+  // Resolve the active notation: its error (if any), the MathML it produces, and whether it blocks save.
+  const newMathml: string | null =
+    mode === 'tex'
+      ? hasTex
+        ? texResult?.ok
+          ? `<math>${texResult.mathml}</math>`
+          : null
+        : null // TeX blank → keep existing (handled in buildUpdated)
+      : rawMathml.trim() && !rawError
+        ? rawMathml.trim()
+        : null;
+  const notationError = mode === 'tex' ? (hasTex && texResult && !texResult.ok ? texResult.error : null) : rawError;
+  const notationBlocks =
+    mode === 'tex' ? hasTex && (!engine || !texResult?.ok) : !!rawError;
+  const canSave = slug.trim() !== '' && !notationBlocks;
+
+  // What the preview + validation use: the new notation, else the concept's existing first rendering.
+  const effectiveMathml = newMathml ?? concept.mathml[0] ?? null;
   const missingRefs = useMemo(
     () => (effectiveMathml ? missingSpeechRefs(en, effectiveMathml) : []),
     [en, effectiveMathml],
   );
 
   const buildUpdated = (): Concept => {
-    const mathml =
-      hasTex && result?.ok
-        ? [`<math>${result.mathml}</math>`, ...concept.mathml.slice(1)]
-        : concept.mathml;
+    const mathml = newMathml ? [newMathml, ...concept.mathml.slice(1)] : concept.mathml;
     const n = Number(arity);
     return {
       ...concept, // carries `raw` for lossless serialization
@@ -82,7 +98,8 @@ export function NotationEditor({
       mathml,
       links: lines(linksText),
       alias: lines(aliasText),
-      tex: tex.trim() || undefined,
+      // TeX kept only when it authored the notation; raw-MathML authoring clears it.
+      tex: mode === 'tex' ? tex.trim() || undefined : undefined,
     };
   };
 
@@ -117,17 +134,63 @@ export function NotationEditor({
           <span>Speech (en)</span>
           <textarea value={en} spellCheck={false} rows={2} onChange={(e) => setEn(e.target.value)} />
         </label>
-        <label className="field">
-          <span>Notation — TeX (blank keeps current MathML)</span>
-          <textarea
-            data-testid="tex-input"
-            value={tex}
-            spellCheck={false}
-            rows={2}
-            placeholder={'-\\arg{x}{n}'}
-            onChange={(e) => setTex(e.target.value)}
-          />
-        </label>
+        <div className="field">
+          <span className="notation-head">
+            Notation
+            <span className="mode-toggle" role="tablist" aria-label="Notation input mode">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === 'tex'}
+                className={mode === 'tex' ? 'active' : ''}
+                onClick={() => setMode('tex')}
+              >
+                TeX
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === 'mathml'}
+                className={mode === 'mathml' ? 'active' : ''}
+                onClick={() => setMode('mathml')}
+              >
+                Raw MathML
+              </button>
+            </span>
+            {mode === 'tex' && (
+              <button
+                type="button"
+                className="info-btn"
+                aria-label="Macro help"
+                aria-expanded={showLegend}
+                title="Macro help"
+                onClick={() => setShowLegend((v) => !v)}
+              >
+                ⓘ
+              </button>
+            )}
+          </span>
+          {mode === 'tex' ? (
+            <textarea
+              data-testid="tex-input"
+              aria-label="Notation TeX"
+              value={tex}
+              spellCheck={false}
+              rows={2}
+              placeholder={'-\\arg{x}{n}'}
+              onChange={(e) => setTex(e.target.value)}
+            />
+          ) : (
+            <textarea
+              data-testid="mathml-input"
+              aria-label="Raw MathML"
+              value={rawMathml}
+              spellCheck={false}
+              rows={2}
+              onChange={(e) => setRawMathml(e.target.value)}
+            />
+          )}
+        </div>
       </div>
 
       {missingRefs.length > 0 && (
@@ -136,7 +199,8 @@ export function NotationEditor({
         </p>
       )}
 
-      <table className="legend">
+      {showLegend && (
+      <table className="legend" data-testid="legend">
         <thead>
           <tr>
             <th>Macro</th>
@@ -174,10 +238,11 @@ export function NotationEditor({
           </tr>
         </tbody>
       </table>
+      )}
 
-      {hasTex && result && !result.ok ? (
+      {notationError ? (
         <span className="error" role="alert" data-testid="error">
-          {result.error}
+          {notationError}
         </span>
       ) : (
         <div className="previews">
@@ -186,7 +251,7 @@ export function NotationEditor({
             {effectiveMathml ? (
               <MathML className="preview" markup={effectiveMathml} data-testid="preview" />
             ) : (
-              <span className="hint">{hasTex ? 'Loading renderer…' : 'no notation'}</span>
+              <span className="hint">{mode === 'tex' && hasTex ? 'Loading renderer…' : 'no notation'}</span>
             )}
           </div>
           <div className="preview-cell">

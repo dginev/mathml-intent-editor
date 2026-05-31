@@ -269,6 +269,42 @@
   box-sizing: border-box;
 }
 
+/* Notation heading: label + input-mode toggle + (i) help. */
+.notation-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.mode-toggle button {
+  border: 0;
+  background: var(--surface);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.7rem;
+  padding: 0.1rem 0.45rem;
+  cursor: pointer;
+}
+.mode-toggle button.active {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.info-btn {
+  border: 0;
+  background: none;
+  color: var(--link);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0;
+}
+
 /* Validation note: speech refs not marked in the notation. */
 .warn {
   margin: 0 0 0.75rem;
