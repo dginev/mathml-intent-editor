@@ -31,9 +31,9 @@ export type Concept = {
   /** Alternate names/slugs. */
   alias: string[];
   /**
-   * Editor-authored TeX source — kept **locally only** (edit cache), so re-editing reopens the
-   * original source. NOT written to `open.yml` (that would change the W3C format). Absent for entries
-   * loaded from the file.
+   * Editor-authored TeX source for the primary notation. Persisted to `open.yml` as `tex:` (when
+   * present) so re-editing reopens the original source; round-trips via parse/serialize. Absent for
+   * entries that have no TeX (e.g. hand-authored MathML).
    */
   tex?: string;
   /** The original YAML entry, preserved so serialization round-trips fields we don't model. */

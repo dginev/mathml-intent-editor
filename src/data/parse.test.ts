@@ -41,6 +41,12 @@ describe('parseDictionary (W3C open.yml schema)', () => {
     expect(c.raw?.notationa).toBe('mo ′'); // a non-language key is not mistaken for speech
   });
 
+  it('reads the persisted tex source into Concept.tex', () => {
+    const yaml = w3cYaml([{ concept: 'additive-inverse', arity: 1, tex: '-\\arg{x}{n}' }]);
+    const [c] = parseDictionary(yaml);
+    expect(c.tex).toBe('-\\arg{x}{n}');
+  });
+
   it('keeps the original entry in raw for lossless round-trip', () => {
     const yaml = w3cYaml([{ concept: 'x', notationa: 'mo ′', comments: 'legacy' }]);
     const [c] = parseDictionary(yaml);

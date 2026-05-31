@@ -12,8 +12,8 @@ export type MergeResult = {
 
 /**
  * Stable identity of a concept's *file* content (order-sensitive on arrays); `undefined` = absent.
- * Excludes the editor-only `tex` (local, not in open.yml) so it never triggers a reconcile conflict.
- * Exported so the pending-change classifier shares one definition of "content changed".
+ * Includes `tex` (now persisted to open.yml), so re-authoring the TeX counts as a change even when the
+ * rendered MathML is unchanged. Exported so the pending-change classifier shares one "content changed".
  */
 export function contentKey(c?: Concept): string {
   if (!c) return '∅';
@@ -26,6 +26,7 @@ export function contentKey(c?: Concept): string {
     c.links,
     c.alias,
     c.speech?.length ? c.speech : null,
+    c.tex ?? null,
   ]);
 }
 

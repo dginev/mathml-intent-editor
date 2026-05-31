@@ -12,6 +12,7 @@ type RawEntry = Record<string, unknown> & {
   mathml?: string | string[];
   urls?: string | string[];
   alias?: string | string[];
+  tex?: string;
 };
 
 type Doc = { concepts?: Array<{ title?: string; intents?: RawEntry[] }> };
@@ -36,6 +37,7 @@ function normalize(e: RawEntry): Concept {
     mathml: asArray(e.mathml),
     links: asArray(e.urls),
     alias: asArray(e.alias),
+    tex: typeof e.tex === 'string' ? e.tex : undefined,
     raw: e,
   };
 }

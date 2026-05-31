@@ -34,7 +34,7 @@ describe('serializeConcepts', () => {
     expect(doc.concepts[0].intents.map((e) => e.concept)).toEqual(['alpha', 'beta']);
   });
 
-  it('preserves truly-unmodeled fields via raw, and never writes tex', () => {
+  it('preserves truly-unmodeled fields via raw, and writes the editor tex', () => {
     const out = serializeConcepts([
       concept({ slug: 'x', property: 'symbol', tex: '\\arg{a}{x}', raw: { concept: 'x', notation: 'legacy' } }),
     ]);
@@ -42,7 +42,7 @@ describe('serializeConcepts', () => {
       .intents[0];
     expect(e.notation).toBe('legacy'); // unmodeled — preserved from raw
     expect(e.property).toBe('symbol'); // modeled — from the concept
-    expect('tex' in e).toBe(false); // editor-only, never persisted to the shared file
+    expect(e.tex).toBe('\\arg{a}{x}'); // editor TeX is now persisted as `tex:`
   });
 
   it('deletes a modeled field that was cleared (set to empty)', () => {

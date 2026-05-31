@@ -22,8 +22,8 @@ function setOrDelete(e: Record<string, unknown>, key: string, value: unknown): v
  * entries. We start from each concept's preserved `raw` so unmodeled fields (`property`, `arity`,
  * `notation*`, `comments`, key order) round-trip untouched, then overlay the modeled fields.
  *
- * Note: the editor-only `tex` is intentionally NOT written — adding a field to the shared file is a
- * W3C-format change (needs a group decision); `tex` lives only in the local edit cache.
+ * The editor-authored `tex` IS written (as `tex:`) when present, so the TeX source is preserved in the
+ * file and re-edits reopen it. (This adds a field to the shared file — a W3C-format change to socialize.)
  */
 /**
  * Deterministic canonical order, fully determined by `(concept, arity)`: ASCII (code-unit) by slug,
@@ -58,7 +58,7 @@ export function serializeConcepts(concepts: Concept[]): string {
     setOrDelete(e, 'mathml', c.mathml);
     setOrDelete(e, 'urls', c.links);
     setOrDelete(e, 'alias', c.alias);
-    delete e.tex; // never persist the editor-only TeX to the shared file
+    setOrDelete(e, 'tex', c.tex); // preserve the editor's TeX source when present
     return e;
   });
   // lineWidth: 0 disables line wrapping — long URLs/MathML stay on one line, so editing one entry
