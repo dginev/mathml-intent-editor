@@ -50,7 +50,8 @@ const columns = [
     size: 44,
     cell: ({ row, table }) => {
       const meta = table.options.meta as TableMeta | undefined;
-      const deleted = meta?.changeKind?.(row.original) === 'deleted';
+      if (!meta?.onDelete) return null; // hidden unless editing is allowed (signed in)
+      const deleted = meta.changeKind?.(row.original) === 'deleted';
       return (
         <button
           type="button"

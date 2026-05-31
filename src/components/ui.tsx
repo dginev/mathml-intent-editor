@@ -79,3 +79,37 @@ export function InfoPopover({ label, children }: { label: string; children: Reac
     </span>
   );
 }
+
+/**
+ * A floating, dismissible notification (used to surface a failed Save). Auto-dismisses after `duration`
+ * ms (set `duration={0}` to keep it until manually closed); a new `message` restarts the timer.
+ */
+export function Toast({
+  message,
+  kind = 'error',
+  onClose,
+  duration = 12000,
+}: {
+  message: string;
+  kind?: 'error' | 'info';
+  onClose: () => void;
+  duration?: number;
+}) {
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
+  useEffect(() => {
+    if (!duration) return;
+    const t = setTimeout(() => closeRef.current(), duration);
+    return () => clearTimeout(t);
+  }, [message, duration]);
+  return (
+    <div className={`toast toast-${kind}`} role="alert" data-testid="toast">
+      <span className="toast-msg">{message}</span>
+      <button type="button" className="toast-close" aria-label="Dismiss" onClick={onClose}>
+        ×
+      </button>
+    </div>
+  );
+}

@@ -4,10 +4,12 @@ import {
   clearIdentity,
   consumeState,
   exchangeCodeForIdentity,
+  isExpired,
   loadIdentity,
   parseCallback,
   rememberState,
   saveIdentity,
+  secondsUntilExpiry,
   type Identity,
 } from './auth';
 
@@ -84,5 +86,42 @@ describe('identity storage', () => {
     expect(loadIdentity(s)).toEqual(id);
     clearIdentity(s);
     expect(loadIdentity(s)).toBeNull();
+  });
+
+  it('treats a stored but expired session as signed-out (and drops it)', () => {
+    const s = fakeStorage();
+    saveIdentity(s, { handle: 'dginev', jwt: jwtExp(-60) }); // expired a minute ago
+    expect(loadIdentity(s)).toBeNull();
+    expect(s.getItem('intent-editor.identity')).toBeNull(); // pruned
+  });
+
+  it('loads a still-valid session', () => {
+    const s = fakeStorage();
+    const id: Identity = { handle: 'dginev', jwt: jwtExp(3600) }; // an hour left
+    saveIdentity(s, id);
+    expect(loadIdentity(s)).toEqual(id);
+  });
+});
+
+/** Build a JWT-shaped string with a base64url payload carrying `exp` (now + `inSeconds`). */
+const jwtExp = (inSeconds: number): string => {
+  const exp = Math.floor(Date.now() / 1000) + inSeconds;
+  const body = btoa(JSON.stringify({ handle: 'dginev', exp }))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+  return `header.${body}.sig`;
+};
+
+describe('session expiry', () => {
+  it('isExpired is true past exp, false before, false without an exp claim', () => {
+    expect(isExpired({ handle: 'x', jwt: jwtExp(-1) })).toBe(true);
+    expect(isExpired({ handle: 'x', jwt: jwtExp(60) })).toBe(false);
+    expect(isExpired({ handle: 'x', jwt: 'no-exp-token' })).toBe(false);
+  });
+
+  it('secondsUntilExpiry reflects the remaining lifetime (null without exp)', () => {
+    expect(secondsUntilExpiry({ handle: 'x', jwt: jwtExp(120) })).toBeGreaterThan(110);
+    expect(secondsUntilExpiry({ handle: 'x', jwt: 'no-exp-token' })).toBeNull();
   });
 });
