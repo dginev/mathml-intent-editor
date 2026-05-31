@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import temml from 'temml';
-import { texToIntent } from './intent';
+import { missingSpeechRefs, texToIntent } from './intent';
 import type { TemmlEngine } from './temmlEngine';
 
 // In Node (vitest) Temml's command registration works correctly, so we use the real engine directly.
@@ -80,5 +80,22 @@ describe('texToIntent', () => {
   it('returns an error result for invalid TeX', () => {
     const r = texToIntent(engine, '\\frac{1}', 'broken');
     expect(r.ok).toBe(false);
+  });
+});
+
+describe('missingSpeechRefs', () => {
+  it('matches positional $N speech refs to arg="aN" notation (W3C convention)', () => {
+    const mathml = "<math><mi arg='a1'>A</mi><mi arg='a2'>B</mi></math>";
+    expect(missingSpeechRefs('union of $1 and $2', mathml)).toEqual([]);
+  });
+
+  it('matches named $name speech refs directly to arg="name"', () => {
+    expect(missingSpeechRefs('$lhs iff $rhs', "<math><mi arg='lhs'/><mi arg='rhs'/></math>")).toEqual([]);
+  });
+
+  it('reports refs with no matching argument', () => {
+    const mathml = "<math><mi arg='a1'>A</mi></math>";
+    expect(missingSpeechRefs('f of $1 and $2', mathml)).toEqual(['$2']);
+    expect(missingSpeechRefs('$x', '<math><mi>x</mi></math>')).toEqual(['$x']);
   });
 });

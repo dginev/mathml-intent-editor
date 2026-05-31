@@ -173,7 +173,7 @@
   background: var(--surface);
   color: var(--text);
   padding: 1rem 1.25rem;
-  width: min(560px, 92vw);
+  width: min(720px, 94vw); /* ~45rem — 10rem wider than before */
   max-height: 85vh;
   overflow: auto;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
@@ -256,19 +256,49 @@
   resize: vertical;
 }
 
-.preview-row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
+/* Two related fields side by side (Speech|Notation, Links|Aliases). */
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem 0.8rem;
+  margin-bottom: 1rem;
+  align-items: start;
+}
+.pair .field textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Validation note: speech refs not marked in the notation. */
+.warn {
+  margin: 0 0 0.75rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  font-size: 0.8rem;
+}
+
+/* Rendered + literal-source previews side by side. */
+.previews {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem;
   margin: 1rem 0;
-  min-height: 2.5rem;
+  align-items: start;
+}
+.preview-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
 }
 
 .preview-label {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  opacity: 0.6;
+  color: var(--text-muted);
 }
 
 .preview math {
@@ -280,14 +310,34 @@
   font-style: italic;
 }
 
-.fragment-src {
-  display: block;
+/* Literal MathML source, lightly highlighted; intent/arg annotations emphasized. */
+.mathml-source {
+  margin: 0;
+  padding: 0.5rem;
+  max-height: 9rem;
+  overflow: auto;
   white-space: pre-wrap;
-  word-break: break-all;
+  word-break: break-word;
   font-size: 0.72rem;
   background: var(--code-bg);
-  padding: 0.5rem;
   border-radius: 6px;
+}
+.mathml-source .tok-tag {
+  color: var(--link);
+}
+.mathml-source .tok-attr,
+.mathml-source .tok-punct {
+  color: var(--text-muted);
+}
+.mathml-source .tok-string {
+  color: var(--accent);
+}
+.mathml-source .tok-annot {
+  background: var(--hover);
+  color: var(--accent);
+  border-radius: 3px;
+  padding: 0 2px;
+  font-weight: 600;
 }
 
 .notation-editor .actions {

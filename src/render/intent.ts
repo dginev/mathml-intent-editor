@@ -26,6 +26,25 @@ function rootOf(doc: Document, math: Element): Element {
   return mrow;
 }
 
+/**
+ * Validate that every argument referenced in a speech `en` template is actually marked in the notation.
+ * Speech uses `$N` (positional) or `$name`; the notation marks args with `arg="aN"` (the W3C file's
+ * convention) or `arg="name"`. A `$1` is satisfied by `arg="a1"` or `arg="1"`; `$name` by `arg="name"`.
+ * Returns the unsatisfied refs (as `$ref` strings) — empty means the speech and notation agree.
+ */
+export function missingSpeechRefs(en: string, mathml: string): string[] {
+  const args = new Set<string>();
+  for (const m of mathml.matchAll(/\barg=["']([^"']+)["']/g)) args.add(m[1]);
+  const missing: string[] = [];
+  for (const m of en.matchAll(/\$([A-Za-z0-9_]+)/g)) {
+    const ref = m[1];
+    const numeric = /^\d+$/.test(ref);
+    const ok = args.has(ref) || (numeric && (args.has(`a${ref}`) || args.has(`_${ref}`)));
+    if (!ok && !missing.includes(`$${ref}`)) missing.push(`$${ref}`);
+  }
+  return missing;
+}
+
 export function texToIntent(temml: TemmlEngine, tex: string, concept: string): IntentResult {
   if (tex.trim() === '') return { ok: true, mathml: '', arity: 0 };
 
