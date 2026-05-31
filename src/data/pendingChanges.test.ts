@@ -31,6 +31,10 @@ describe('classifyChange', () => {
   it('flags an edited row as changed', () => {
     expect(classifyChange(c('power', '<math><mi>y</mi></math>'), baseMap, new Set())).toBe('changed');
   });
+  it('treats a renamed row (raw points to the baseline) as changed, not added', () => {
+    const renamed = { ...c('reciprocal'), raw: { concept: 'power' } }; // power → reciprocal
+    expect(classifyChange(renamed, baseMap, new Set())).toBe('changed');
+  });
   it('flags a row absent from the baseline as added', () => {
     expect(classifyChange(c('brand-new'), baseMap, new Set())).toBe('added');
   });
@@ -69,6 +73,13 @@ describe('computeEdits', () => {
 
   it('produces an empty cache when the working set matches the baseline', () => {
     expect(computeEdits([c('power'), c('sum')], new Set(), baseMap)).toEqual({});
+  });
+
+  it('keys a rename by its baseline id so the original is replaced (no resurrection)', () => {
+    const renamed = { ...c('exponent'), raw: { concept: 'power' } }; // power → exponent
+    const edits = computeEdits([renamed, c('sum')], new Set(), baseMap);
+    expect(edits['power#']).toEqual({ value: renamed, baseAtEdit: baseMap.get('power#') });
+    expect('exponent#' in edits).toBe(false); // not recorded as a separate add
   });
 });
 
