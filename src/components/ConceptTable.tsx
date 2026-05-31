@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import {
   createColumnHelper,
   flexRender,
@@ -10,9 +10,16 @@ import {
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { Concept } from '../types';
 import { conceptId } from '../data/conceptId';
+import type { ChangeKind } from '../data/pendingChanges';
 import { MathML } from './MathML';
 
 const columnHelper = createColumnHelper<Concept>();
+
+/** Per-row callbacks the display columns reach through TanStack's table `meta`. */
+type TableMeta = {
+  onDelete?: (c: Concept) => void;
+  changeKind?: (c: Concept) => ChangeKind | null;
+};
 
 /** Case-insensitive substring match across slug, English template, area, and aliases. */
 const conceptFilter: FilterFn<Concept> = (row, _columnId, value) => {
@@ -42,19 +49,20 @@ const columns = [
     header: '',
     size: 44,
     cell: ({ row, table }) => {
-      const onDelete = (table.options.meta as { onDelete?: (c: Concept) => void } | undefined)?.onDelete;
+      const meta = table.options.meta as TableMeta | undefined;
+      const deleted = meta?.changeKind?.(row.original) === 'deleted';
       return (
         <button
           type="button"
           className="row-x"
-          aria-label={`Delete ${row.original.slug}`}
-          title="Delete row"
+          aria-label={`${deleted ? 'Restore' : 'Delete'} ${row.original.slug}`}
+          title={deleted ? 'Restore row' : 'Delete row'}
           onClick={(e) => {
             e.stopPropagation(); // don't open the editor
-            onDelete?.(row.original);
+            meta?.onDelete?.(row.original);
           }}
         >
-          ✗
+          {deleted ? '↺' : '✗'}
         </button>
       );
     },
@@ -74,7 +82,8 @@ export function ConceptTable({
   onLoadMore,
   editingId,
   onDelete,
-  pendingDeleteId,
+  changeKind,
+  headerActions,
 }: {
   /** The rows loaded so far (a growing prefix of the full list). */
   data: Concept[];
@@ -85,10 +94,12 @@ export function ConceptTable({
   onLoadMore?: () => void;
   /** conceptId of the row being edited — highlighted and scrolled to centre while the modal is open. */
   editingId?: string | null;
-  /** Per-row delete (the ✗ button). */
+  /** Per-row delete/restore (the ✗ / ↺ button). */
   onDelete?: (concept: Concept) => void;
-  /** conceptId of a row pending delete confirmation — flashed red while the confirm() dialog is up. */
-  pendingDeleteId?: string | null;
+  /** Classify a row's pending change (added / changed / deleted) for its background colour. */
+  changeKind?: (concept: Concept) => ChangeKind | null;
+  /** Buttons rendered as a phantom rightmost column in the sticky header (Add entry + batch Save). */
+  headerActions?: ReactNode;
 }) {
   const table = useReactTable({
     data,
@@ -97,7 +108,7 @@ export function ConceptTable({
     globalFilterFn: conceptFilter,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    meta: { onDelete },
+    meta: { onDelete, changeKind },
   });
 
   const rows = table.getRowModel().rows;
@@ -129,7 +140,9 @@ export function ConceptTable({
 
   return (
     <div className="table-scroll" ref={scrollRef} data-testid="table-scroll">
-      <div className="table-inner" style={{ width: totalWidth }}>
+      {/* width is intrinsic (max-content) so the phantom header-actions column extends the table to its
+          right; minWidth keeps it at least as wide as the data columns. */}
+      <div className="table-inner" style={{ minWidth: totalWidth }}>
         <div className="thead">
           {table.getHeaderGroups().map((hg) => (
             <div className="tr" key={hg.id}>
@@ -138,6 +151,11 @@ export function ConceptTable({
                   {flexRender(h.column.columnDef.header, h.getContext())}
                 </div>
               ))}
+              {headerActions && (
+                <div className="th th-actions" key="__header-actions">
+                  {headerActions}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -145,10 +163,11 @@ export function ConceptTable({
         <div className="tbody" style={{ height: virtualizer.getTotalSize() }}>
           {items.map((vi) => {
             const row = rows[vi.index];
+            const kind = changeKind?.(row.original) ?? null;
             return (
               <div
                 className={`tr row-clickable${conceptId(row.original) === editingId ? ' row-editing' : ''}${
-                  conceptId(row.original) === pendingDeleteId ? ' row-deleting' : ''
+                  kind ? ` row-${kind}` : ''
                 }`}
                 key={row.id}
                 data-row-index={vi.index}

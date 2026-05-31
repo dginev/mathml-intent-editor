@@ -1,0 +1,76 @@
+import { describe, expect, it } from 'vitest';
+import { parse } from 'yaml';
+import { classifyChange, computeEdits, deletedIdsFromEdits, effectiveYaml } from './pendingChanges';
+import { conceptId } from './conceptId';
+import type { Concept } from '../types';
+
+const c = (slug: string, mathml = '<math><mi>x</mi></math>'): Concept => ({
+  slug,
+  mathml: [mathml],
+  links: [],
+  alias: [],
+});
+const mapOf = (...cs: Concept[]) => new Map(cs.map((x) => [conceptId(x), x]));
+
+describe('classifyChange', () => {
+  const base = c('power');
+  const baseMap = mapOf(base);
+
+  it('returns null for a row identical to the baseline', () => {
+    expect(classifyChange(c('power'), baseMap, new Set())).toBeNull();
+  });
+  it('flags an edited row as changed', () => {
+    expect(classifyChange(c('power', '<math><mi>y</mi></math>'), baseMap, new Set())).toBe('changed');
+  });
+  it('flags a row absent from the baseline as added', () => {
+    expect(classifyChange(c('brand-new'), baseMap, new Set())).toBe('added');
+  });
+  it('flags a row in the deleted set as deleted (regardless of content)', () => {
+    expect(classifyChange(base, baseMap, new Set(['power#']))).toBe('deleted');
+  });
+});
+
+describe('effectiveYaml', () => {
+  it('omits pending deletions from the submitted content', () => {
+    const yaml = effectiveYaml([c('alpha'), c('beta')], new Set(['beta#']));
+    const slugs = (parse(yaml) as { concepts: { intents: { concept: string }[] }[] }).concepts[0].intents.map(
+      (e) => e.concept,
+    );
+    expect(slugs).toEqual(['alpha']); // beta dropped
+  });
+});
+
+describe('computeEdits', () => {
+  const base = c('power');
+  const baseMap = mapOf(base, c('sum'));
+
+  it('records adds, changes, and deletions; drops unchanged and add-then-delete', () => {
+    const added = c('brand-new');
+    const changed = c('power', '<math><mi>z</mi></math>');
+    const edits = computeEdits(
+      [added, changed, c('sum') /* unchanged */],
+      new Set(['sum#', 'ghost#']), // sum deleted (baseline); ghost added-then-deleted (no baseline)
+      baseMap,
+    );
+    expect(edits['brand-new#']).toEqual({ value: added, baseAtEdit: null });
+    expect(edits['power#']).toEqual({ value: changed, baseAtEdit: base });
+    expect(edits['sum#']).toEqual({ value: null, baseAtEdit: baseMap.get('sum#') });
+    expect('ghost#' in edits).toBe(false); // added-then-deleted nets to nothing
+  });
+
+  it('produces an empty cache when the working set matches the baseline', () => {
+    expect(computeEdits([c('power'), c('sum')], new Set(), baseMap)).toEqual({});
+  });
+});
+
+describe('deletedIdsFromEdits', () => {
+  it('reconstructs the pending-delete set (tombstones of baseline rows)', () => {
+    const baseMap = mapOf(c('power'));
+    const edits = {
+      'power#': { value: null, baseAtEdit: c('power') },
+      'gone#': { value: null, baseAtEdit: c('gone') }, // not in baseMap → ignored
+      'edited#': { value: c('edited'), baseAtEdit: null }, // not a deletion
+    };
+    expect([...deletedIdsFromEdits(edits, baseMap)]).toEqual(['power#']);
+  });
+});

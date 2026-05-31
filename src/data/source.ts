@@ -26,32 +26,35 @@ export type ConceptSource = {
   serialize(): string;
   /** All concept names currently in the dataset — used to flag alias references to known concepts. */
   slugSet(): Set<string>;
+  /** A snapshot of every concept currently held (includes local adds/edits) — for change diffing. */
+  all(): Concept[];
 };
 
 export function createSource(concepts: Concept[]): ConceptSource {
-  const all = concepts.slice();
+  const items = concepts.slice();
   // Edits/deletes are rare, so a linear find by conceptId is fine and avoids stale-index bookkeeping.
-  const indexOf = (id: string) => all.findIndex((c) => conceptId(c) === id);
+  const indexOf = (id: string) => items.findIndex((c) => conceptId(c) === id);
   return {
     get total() {
-      return all.length;
+      return items.length;
     },
-    fetchRange: async (start, end) => all.slice(Math.max(0, start), Math.min(end, all.length)),
+    fetchRange: async (start, end) => items.slice(Math.max(0, start), Math.min(end, items.length)),
     applyEdit: (id, updated) => {
       const i = indexOf(id);
-      if (i >= 0) all[i] = updated;
+      if (i >= 0) items[i] = updated;
     },
     add: (concept) => {
-      const i = all.findIndex((c) => byConcept(concept, c) < 0); // first row that sorts after it
-      if (i < 0) all.push(concept);
-      else all.splice(i, 0, concept);
+      const i = items.findIndex((c) => byConcept(concept, c) < 0); // first row that sorts after it
+      if (i < 0) items.push(concept);
+      else items.splice(i, 0, concept);
     },
     remove: (id) => {
       const i = indexOf(id);
-      if (i >= 0) all.splice(i, 1);
+      if (i >= 0) items.splice(i, 1);
     },
-    serialize: () => serializeConcepts(all),
-    slugSet: () => new Set(all.map((c) => c.slug)),
+    serialize: () => serializeConcepts(items),
+    slugSet: () => new Set(items.map((c) => c.slug)),
+    all: () => items.slice(),
   };
 }
 
