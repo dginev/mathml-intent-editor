@@ -1,9 +1,9 @@
 /**
- * The user's active pull request — the one their `intent/<handle>` branch terminates in. Persisted in
- * `localStorage` so a reload can tell whether that PR is still open. When it's closed or merged the app
- * resets the session (deletes the branch via the service, clears edits, reloads from the base branch).
+ * The user's active pull request and the unique branch it lives on. Persisted in `localStorage` so a
+ * reload can tell whether that PR is still open: while it is, more Saves push onto the same `branch`
+ * (the PR updates); once it's closed/merged the app resets and the next Save mints a fresh branch.
  */
-export type ActivePr = { number: number; url: string };
+export type ActivePr = { number: number; url: string; branch: string };
 
 const KEY = 'intent-editor.pr';
 
@@ -16,7 +16,7 @@ export function loadPr(storage: Storage): ActivePr | null {
   if (!raw) return null;
   try {
     const p = JSON.parse(raw) as ActivePr;
-    return p && typeof p.number === 'number' ? p : null;
+    return p && typeof p.number === 'number' && typeof p.branch === 'string' ? p : null;
   } catch {
     return null;
   }
@@ -24,6 +24,20 @@ export function loadPr(storage: Storage): ActivePr | null {
 
 export function clearPr(storage: Storage): void {
   storage.removeItem(KEY);
+}
+
+/**
+ * A unique working-branch name so a user can have several PRs over time (one open at a time, but new
+ * ones after each closes/merges): `<handle>-<YYYYMMDD>-<first-concept>`, e.g.
+ * `dginev-20260531-additive-inverse`. Sanitized to a valid git ref; the concept part is capped.
+ */
+export function newBranchName(handle: string, firstConcept: string, now: Date): string {
+  const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(
+    now.getDate(),
+  ).padStart(2, '0')}`;
+  const safe = (s: string) => s.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+  const concept = safe(firstConcept).slice(0, 40) || 'update';
+  return `${safe(handle) || 'user'}-${date}-${concept}`;
 }
 
 /**

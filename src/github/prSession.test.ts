@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { clearPr, fetchPullState, loadPr, savePr } from './prSession';
+import { clearPr, fetchPullState, loadPr, newBranchName, savePr } from './prSession';
 
 function memStorage(): Storage {
   const m = new Map<string, string>();
@@ -16,13 +16,33 @@ function memStorage(): Storage {
 }
 
 describe('prSession storage', () => {
-  it('round-trips and clears the active PR', () => {
+  it('round-trips and clears the active PR (with its branch)', () => {
     const s = memStorage();
+    const pr = { number: 12, url: 'https://github.com/o/r/pull/12', branch: 'dginev-20260531-power' };
     expect(loadPr(s)).toBeNull();
-    savePr(s, { number: 12, url: 'https://github.com/o/r/pull/12' });
-    expect(loadPr(s)).toEqual({ number: 12, url: 'https://github.com/o/r/pull/12' });
+    savePr(s, pr);
+    expect(loadPr(s)).toEqual(pr);
     clearPr(s);
     expect(loadPr(s)).toBeNull();
+  });
+
+  it('ignores a legacy stored PR that has no branch', () => {
+    const s = memStorage();
+    s.setItem('intent-editor.pr', JSON.stringify({ number: 9, url: 'u' }));
+    expect(loadPr(s)).toBeNull();
+  });
+});
+
+describe('newBranchName', () => {
+  it('is <handle>-<YYYYMMDD>-<first-concept>', () => {
+    expect(newBranchName('dginev', 'additive-inverse', new Date(2026, 4, 31))).toBe(
+      'dginev-20260531-additive-inverse',
+    );
+  });
+
+  it('sanitizes and caps the concept, with fallbacks', () => {
+    expect(newBranchName('dginev', 'A Weird/Name!', new Date(2026, 0, 9))).toBe('dginev-20260109-a-weird-name');
+    expect(newBranchName('dginev', '', new Date(2026, 0, 9))).toBe('dginev-20260109-update');
   });
 });
 

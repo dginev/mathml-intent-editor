@@ -139,8 +139,8 @@ runs without a backend. So **don't remove the seed path** — the perf e2e depen
   upstream where untouched, keep user edits, report same-slug divergences as conflicts.
 - `src/data/editCache.ts` — persist the user's edits (value + `baseAtEdit` fork point) in
   `localStorage` so a reload restores in-progress changes; `baseAtEdit` is the per-concept ancestor.
-- `src/data/loadDictionary.ts` — orchestrator: raw base (+ `intent/<handle>` branch when a handle
-  exists) ∪ local edits → `threeWayMerge` → `{ concepts, conflicts }`. `App` shows a conflict banner.
+- `src/data/loadDictionary.ts` — orchestrator: raw base (+ the active PR `branch` when one is tracked)
+  ∪ local edits → `threeWayMerge` → `{ concepts, conflicts, base }`. `App` shows a conflict banner.
 - `src/data/source.ts` — `ConceptSource`: paged, **on-demand** access (`fetchRange(start,end)`, `total`,
   `applyEdit`, `serialize`). The UI knows `total` up front but pages rows in (PAGE=50 ≈ a couple of
   viewports) as the user scrolls — `App` grows a loaded prefix and `ConceptTable` calls `onLoadMore`
@@ -213,15 +213,18 @@ in `service/src/github.js`.
 - `src/data/serialize.ts` — concepts → `open.yml` (the content sent to `/submit`).
 
 `App` flow: **sign in** (`/auth` → store `{handle, jwt}`) gates editing when a service is configured;
-**Save** → `submitToService` (bot commits to `intent/<handle>` + opens/updates the PR) and opens the PR
-link. Signing in reloads the dictionary with the user's branch (`handle` dep on the load effect).
+**Unique branch per PR.** The client picks a unique working branch `<handle>-<YYYYMMDD>-<first-concept>`
+(`newBranchName` in `prSession.ts`), e.g. `dginev-20260531-additive-inverse`, and stores it with the
+active PR (`ActivePr.branch`). **Save** → `submitToService({…, branch})`: while the PR is open the SAME
+branch is reused, so each Save is a new commit that updates the open PR; once it closed/merged (or none
+exists) a fresh branch name is minted and a new PR opened. The data load reconciles against the active
+branch (`loadDictionary({branch})` reads its `open.yml`).
 
-**Session reset on PR close.** The user's branch terminates in a PR; when that PR is closed or merged
-the session must end. `App` tracks the active PR and, on mount + window focus, polls its state
-(`fetchPullState`); if it's `closed` (merged counts), it calls `/reset` (bot deletes `intent/<handle>`),
+**Session reset on PR close.** `App` tracks the active PR and, on mount + window focus, polls its state
+(`fetchPullState`); if it's `closed` (merged counts), it calls `/reset` with the branch (bot deletes it),
 clears the local edit cache, and reloads from `main` — so the next edit starts a fresh branch with a
-minimal diff. `/submit` also self-heals: if the branch has no open PR it drops the stale branch before
-committing (lazy cleanup if `/reset` was missed).
+minimal diff. `/submit` also self-heals: if the (reused) branch has no open PR it drops the stale branch
+before committing (lazy cleanup if `/reset` was missed).
 
 The service itself is in **`service/`** (Fastify, deployed on `latexml.rs` behind Caddy at
 `https://intent-api.latexml.rs`) — see `service/README.md`.

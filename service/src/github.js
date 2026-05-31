@@ -125,8 +125,10 @@ async function deleteBranch(octokit, owner, repo, branch) {
  * minimal. An open PR is left in place and pushing onto it auto-updates it. Returns `{ prNumber, prUrl }`.
  */
 export function makeSubmit({ octokit, owner, repo, baseBranch, filePath }) {
-  return async function submit({ handle, content, message, title, description }) {
-    const branch = `intent/${handle}`;
+  return async function submit({ handle, content, message, title, description, branch: requested }) {
+    // The client picks a unique branch per PR (`<handle>-<date>-<concept>`); reuse it while its PR is
+    // open (a new commit updates the PR), else cut it fresh off the base. Fall back to a per-handle name.
+    const branch = requested || `intent/${handle}`;
     if (!(await openPrFor(octokit, owner, repo, branch))) await deleteBranch(octokit, owner, repo, branch);
     await ensureBranch(octokit, owner, repo, baseBranch, branch);
     await octokit.request('PUT /repos/{owner}/{repo}/contents/{path}', {
@@ -149,8 +151,8 @@ export function makeSubmit({ octokit, owner, repo, baseBranch, filePath }) {
  * branch off the current base. Returns `{ deleted }`.
  */
 export function makeReset({ octokit, owner, repo }) {
-  return async function reset({ handle }) {
-    const deleted = await deleteBranch(octokit, owner, repo, `intent/${handle}`);
+  return async function reset({ handle, branch }) {
+    const deleted = await deleteBranch(octokit, owner, repo, branch || `intent/${handle}`);
     return { deleted };
   };
 }

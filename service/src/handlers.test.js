@@ -39,11 +39,17 @@ test('auth: rejects a missing code with 400', async () => {
   await assert.rejects(() => handlers.auth({}), (e) => e.status === 400);
 });
 
-test('submit: verifies the JWT and runs the bot submit (title + description flow through)', async () => {
+test('submit: verifies the JWT and runs the bot submit (title/description/branch flow through)', async () => {
   const { handlers, calls } = deps();
   const out = await handlers.submit({
     authorization: 'Bearer jwt(dginev)',
-    body: { content: 'open: yaml', message: 'edit power', title: 'edit: power; by @dginev', description: '### changes' },
+    body: {
+      content: 'open: yaml',
+      message: 'edit power',
+      title: 'edit: power; by @dginev',
+      description: '### changes',
+      branch: 'dginev-20260531-power',
+    },
   });
   assert.equal(out.prNumber, 7);
   assert.deepEqual(calls.submit[0], {
@@ -52,6 +58,7 @@ test('submit: verifies the JWT and runs the bot submit (title + description flow
     message: 'edit power',
     title: 'edit: power; by @dginev',
     description: '### changes',
+    branch: 'dginev-20260531-power',
   });
 });
 
@@ -79,9 +86,12 @@ test('submit: defaults a commit message mentioning the handle', async () => {
 
 test('reset: verifies the JWT and deletes the caller’s branch', async () => {
   const { handlers, calls } = deps();
-  const out = await handlers.reset({ authorization: 'Bearer jwt(dginev)' });
+  const out = await handlers.reset({
+    authorization: 'Bearer jwt(dginev)',
+    body: { branch: 'dginev-20260531-power' },
+  });
   assert.deepEqual(out, { deleted: true });
-  assert.deepEqual(calls.reset[0], { handle: 'dginev' });
+  assert.deepEqual(calls.reset[0], { handle: 'dginev', branch: 'dginev-20260531-power' });
 });
 
 test('reset: rejects a missing/invalid JWT with 401', async () => {
