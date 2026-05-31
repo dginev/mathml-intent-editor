@@ -208,9 +208,11 @@ export function ConceptTable({
                   kind ? ` row-${kind}` : ''
                 }`}
                 key={row.id}
+                data-index={vi.index}
                 data-row-index={vi.index}
                 data-slug={row.original.slug}
-                style={{ transform: `translateY(${vi.start}px)`, height: ROW_HEIGHT }}
+                ref={virtualizer.measureElement} // dynamic height: rows grow when Links wrap
+                style={{ transform: `translateY(${vi.start}px)`, minHeight: ROW_HEIGHT }}
               >
                 {row.getVisibleCells().map((cell) => (
                   <div className="td" key={cell.id} style={{ width: cell.column.getSize() }}>

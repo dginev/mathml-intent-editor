@@ -146,16 +146,21 @@
   background: var(--hover);
 }
 
-/* Link chips: the link's domain as a clickable pill (opens in a new tab). */
+/* Link chips: each link's label as a clickable pill (opens in a new tab). They wrap onto multiple
+   lines when a row has many links — the row grows to fit (dynamic row height). */
 .link-chips {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.25rem;
-  overflow: hidden;
-  white-space: nowrap;
+  gap: 0.25rem 0.3rem;
+  padding: 0.3rem 0;
 }
 .link-chip {
   display: inline-block;
+  max-width: 13rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   padding: 0.05rem 0.45rem;
   border: 1px solid var(--border);
   border-radius: 999px;
