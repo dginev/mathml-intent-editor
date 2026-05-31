@@ -1,19 +1,10 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createSeedSource, createSource, type ConceptSource } from './data/source';
-import { loadDictionary } from './data/loadDictionary';
-import { loadEdits, saveEdits, clearEdits } from './data/editCache';
+import { clearEdits } from './data/editCache';
 import { conceptId } from './data/conceptId';
 import { conceptMatches } from './data/conceptMatch';
-import { byConcept, serializeConcepts } from './data/serialize';
-import {
-  classifyChange,
-  computeEdits,
-  deletedIdsFromEdits,
-  effectiveYaml,
-  type BaseMap,
-  type ChangeKind,
-} from './data/pendingChanges';
+import { classifyChange, type ChangeKind } from './data/pendingChanges';
 import { buildSubmission } from './github/submission';
+import { useDictionary } from './hooks/useDictionary';
 import { useTheme } from './hooks/useTheme';
 import { useGlobalFindShortcut } from './hooks/useGlobalFindShortcut';
 import { ConceptTable } from './components/ConceptTable';
@@ -43,30 +34,14 @@ const NotationEditor = lazy(() =>
   import('./components/NotationEditor').then((m) => ({ default: m.NotationEditor })),
 );
 
-/** Clone the small synthetic seed fixture this many times to exercise the table at the 10k+ row target. */
-const DEV_MULTIPLIER = 1200;
-/** Rows fetched per page — the initial load and each page-down increment (~a couple of viewports). */
-const PAGE = 50;
 /** Renew the session on a visit once it has dipped below this many seconds (6 of its 7 days) — keeps an
  *  active user signed in indefinitely without renewing a token that was just minted. */
 const RENEW_BELOW_SECONDS = 6 * 24 * 60 * 60;
 
 export default function App() {
-  const [source, setSource] = useState<ConceptSource | null>(null);
-  const [rows, setRows] = useState<Concept[]>([]); // loaded prefix of the full list
-  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
   const [editing, setEditing] = useState<Concept | null>(null);
   const [creating, setCreating] = useState(false); // the open modal is for a brand-new concept
-  const [conflicts, setConflicts] = useState<string[]>([]);
-  const [total, setTotal] = useState(0); // row count (set on load, decremented on delete)
-  // Batch-edit session state. The working set is compared against `baseline` (the GitHub working point,
-  // serialized): `dirty` — and so the Save button — is purely content-based. Pending deletions live in
-  // `deletedIds` (the rows stay visible, rendered red) and are enacted only when the batch is saved.
-  const [baseMap, setBaseMap] = useState<BaseMap | null>(null); // baseline concepts, by conceptId
-  const [baseline, setBaseline] = useState<string | null>(null); // baseline serialized, for the dirty check
-  const [deletedIds, setDeletedIds] = useState<Set<string>>(() => new Set());
-  const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null); // last Save failure → red button + toast
   const [savePrompt, setSavePrompt] = useState(false); // the "describe your changes" confirm modal
@@ -75,7 +50,6 @@ export default function App() {
   // The PR the user's branch terminates in; when it closes/merges we reset the session and reload.
   const [activePr, setActivePr] = useState<ActivePr | null>(() => loadPr(localStorage));
   const [reloadKey, setReloadKey] = useState(0); // bump to force a fresh dictionary load
-  const loadingRef = useRef(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const saveDialogRef = useRef<HTMLDialogElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
@@ -100,6 +74,12 @@ export default function App() {
   // Config: backing repo (raw reads) and the auth+PR service. Either may be absent → graceful fallback.
   const repo = useMemo(() => repoConfigFromEnv(), []);
   const service = useMemo(() => serviceConfigFromEnv(), []);
+
+  // The working set (load + paging + edits) lives in one reducer — no mutable source / parallel state.
+  const [dict, dispatch] = useDictionary(repo, reloadKey);
+  const { concepts, loadedCount, baseMap, deletedIds, dirty, conflicts } = dict;
+  const ready = dict.status === 'ready';
+  const total = concepts.length;
 
   // Identity: a verified @handle + JWT from the service's /auth. Required to edit when a service is
   // configured; without a service the app is local-only (no gate, no PRs).
@@ -130,41 +110,6 @@ export default function App() {
       .finally(() => setAuthPending(false));
   }, [service]);
 
-  // Load the dictionary. `reloadKey` is bumped to force a fresh load (sign-out, PR-close reset).
-  useEffect(() => {
-    let live = true;
-    const done = (s: ConceptSource, base: Concept[], deleted: Set<string>, c: string[] = []) => {
-      if (!live) return;
-      const baselineStr = serializeConcepts(base);
-      setRows([]);
-      setSource(s);
-      setBaseMap(new Map(base.map((x) => [conceptId(x), x])));
-      setBaseline(baselineStr);
-      setDeletedIds(deleted);
-      setTotal(s.total);
-      setConflicts(c);
-      setDirty(effectiveYaml(s.all(), deleted) !== baselineStr); // leftover unsaved edits → already dirty
-    };
-    if (repo) {
-      loadDictionary({ ...repo, branch: loadPr(localStorage)?.branch ?? null, edits: loadEdits(localStorage) })
-        .then(({ concepts, conflicts, base }) => {
-          const bMap = new Map(base.map((x) => [conceptId(x), x]));
-          const deleted = deletedIdsFromEdits(loadEdits(localStorage), bMap);
-          // Re-insert the (held-for-display) deleted baseline rows so they stay visible until a Save.
-          const display = [...concepts, ...[...deleted].map((id) => bMap.get(id)!)].sort(byConcept);
-          done(createSource(display), base, deleted, conflicts);
-        })
-        .catch((e) => live && setError(String(e)));
-    } else {
-      createSeedSource(DEV_MULTIPLIER)
-        .then((s) => done(s, s.all(), new Set()))
-        .catch((e) => live && setError(String(e)));
-    }
-    return () => {
-      live = false;
-    };
-  }, [repo, reloadKey]);
-
   // When the user's working PR is closed or merged, end the session: ask the service to delete the
   // (now stale) intent/<handle> branch, drop local edits, and reload clean from the base branch. Checked
   // on mount and whenever the tab regains focus (e.g. after closing the PR on GitHub in another tab).
@@ -194,25 +139,8 @@ export default function App() {
     return () => window.removeEventListener('focus', onFocus);
   }, [resetIfPrClosed]);
 
-  // Page the next chunk in on demand; guarded so overlapping scroll events don't double-fetch.
-  const loadMore = useCallback(async () => {
-    if (!source || loadingRef.current) return;
-    const start = rows.length;
-    if (start >= source.total) return;
-    loadingRef.current = true;
-    try {
-      const next = await source.fetchRange(start, start + PAGE);
-      setRows((prev) => (prev.length === start ? [...prev, ...next] : prev));
-    } finally {
-      loadingRef.current = false;
-    }
-  }, [source, rows.length]);
-
-  // Load the first page once a (new) source is ready.
-  useEffect(() => {
-    if (source) void loadMore();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source]);
+  // Reveal the next page (the reducer caps it at the row count; the first page shows on load).
+  const loadMore = useCallback(() => dispatch({ type: 'loadMore' }), [dispatch]);
 
   const signIn = useCallback(() => {
     if (!service) return;
@@ -307,79 +235,35 @@ export default function App() {
     setCreating(false);
   }, []);
 
-  // Recompute dirtiness and persist the cache after any local change. `nextDeleted` is the deletion set
-  // to apply (passed explicitly because React state updates aren't yet visible synchronously).
-  const persist = useCallback(
-    (nextDeleted: Set<string>) => {
-      if (!source || !baseMap || baseline == null) return;
-      setDeletedIds(nextDeleted);
-      setDirty(effectiveYaml(source.all(), nextDeleted) !== baseline);
-      saveEdits(localStorage, computeEdits(source.all(), nextDeleted, baseMap));
-    },
-    [source, baseMap, baseline],
-  );
-
-  // "Done" — apply the edit/addition to the in-memory source (batched); the global Save submits later.
+  // "Done" — apply the edit/addition to the working set (batched); the global Save submits later.
   const handleSave = useCallback(
     (updated: Concept) => {
-      if (!source) return;
-      if (creating) {
-        source.add(updated);
-        setRows((prev) => [...prev, updated].sort(byConcept)); // show it in canonical position
-        setTotal(source.total);
-      } else if (editing) {
-        const id = conceptId(editing); // identity when opened — stable even if the edit renames it
-        source.applyEdit(id, updated);
-        setRows((prev) => prev.map((c) => (conceptId(c) === id ? updated : c)));
-      }
-      persist(deletedIds);
+      if (creating) dispatch({ type: 'add', concept: updated });
+      else if (editing) dispatch({ type: 'edit', id: conceptId(editing), updated }); // id when opened (rename-safe)
       setCreating(false);
       setEditing(null);
     },
-    [editing, creating, source, deletedIds, persist],
+    [editing, creating, dispatch],
   );
 
-  // Mark/unmark a row for deletion (kept visible, red, until Save). A purely-local addition has nothing
-  // on GitHub to delete, so it's dropped outright instead of being held.
-  const setDeleted = useCallback(
-    (concept: Concept, deleted: boolean) => {
-      if (!source || !baseMap) return;
-      const id = conceptId(concept);
-      if (!baseMap.has(id)) {
-        source.remove(id);
-        setRows((prev) => prev.filter((c) => conceptId(c) !== id));
-        setTotal(source.total);
-        const next = new Set(deletedIds);
-        next.delete(id);
-        persist(next);
-        return;
-      }
-      const next = new Set(deletedIds);
-      if (deleted) next.add(id);
-      else next.delete(id);
-      persist(next);
-    },
-    [source, baseMap, deletedIds, persist],
-  );
-
-  // Row ✗: toggle the pending deletion (delete ⇄ restore).
+  // Row ✗: toggle the pending deletion (delete ⇄ restore). Held visible (red) until Save.
   const toggleRowDelete = useCallback(
     (concept: Concept) => {
       if (!gated()) return;
-      setDeleted(concept, !deletedIds.has(conceptId(concept)));
+      dispatch({ type: 'setDeleted', concept, deleted: !deletedIds.has(conceptId(concept)) });
     },
-    [gated, deletedIds, setDeleted],
+    [gated, deletedIds, dispatch],
   );
 
   const handleDelete = useCallback(() => {
-    if (editing) setDeleted(editing, true);
+    if (editing) dispatch({ type: 'setDeleted', concept: editing, deleted: true });
     setEditing(null);
     setCreating(false);
-  }, [editing, setDeleted]);
+  }, [editing, dispatch]);
 
   // Classify each row for its background colour (added / changed / pending-deleted), vs the baseline.
   const changeKind = useCallback(
-    (c: Concept): ChangeKind | null => (baseMap ? classifyChange(c, baseMap, deletedIds) : null),
+    (c: Concept): ChangeKind | null => classifyChange(c, baseMap, deletedIds),
     [baseMap, deletedIds],
   );
 
@@ -387,10 +271,10 @@ export default function App() {
 
   // "Save" → open the confirm modal: auto-generate the PR title + a Markdown description of the changes.
   const openSavePrompt = useCallback(() => {
-    if (!source || !baseMap) return;
+    if (!ready) return;
     if (!gated()) return;
     const preview = buildSubmission({
-      concepts: source.all(),
+      concepts,
       deletedIds,
       baseMap,
       handle: identity?.handle ?? 'me',
@@ -401,18 +285,18 @@ export default function App() {
     setSaveTitle(preview.title);
     setSaveMessage(preview.description); // editable default; the user can refine it
     setSavePrompt(true);
-  }, [source, baseMap, deletedIds, gated, identity, activePr]);
+  }, [ready, concepts, baseMap, deletedIds, gated, identity, activePr]);
 
   // Submit the whole batch to the service (bot → intent/<handle> branch + PR), using the user's
   // description as the commit message. On success the pushed content becomes the new baseline, so the
   // session returns to a clean state.
   const submitBatch = useCallback(() => {
-    if (!source || baseline == null || !baseMap) return;
+    if (!ready) return;
     if (!gated()) return;
     if (!service || !identity) return; // local-only: nothing to submit
     // Reuse the open PR's branch (a new commit updates it); otherwise a fresh unique branch.
     const { content, branch, ...payload } = buildSubmission({
-      concepts: source.all(),
+      concepts,
       deletedIds,
       baseMap,
       handle: identity.handle,
@@ -430,15 +314,9 @@ export default function App() {
           branch,
           ...payload, // message, title, description
         });
-        // Enact deletions, then adopt the pushed content as the new baseline (clean session).
-        for (const id of deletedIds) source.remove(id);
-        setRows((prev) => prev.filter((c) => !deletedIds.has(conceptId(c))));
-        setTotal(source.total);
-        setBaseMap(new Map(source.all().map((c) => [conceptId(c), c])));
-        setBaseline(content);
-        setDeletedIds(new Set());
-        setDirty(false);
-        saveEdits(localStorage, {});
+        // Enact deletions + adopt the pushed content as the new baseline (clean session); cache cleared
+        // by the persist effect.
+        dispatch({ type: 'committed', content });
         const isNewPr = !activePr || activePr.number !== prNumber;
         savePr(localStorage, { number: prNumber, url: prUrl, branch }); // track it so we can detect closure
         setActivePr({ number: prNumber, url: prUrl, branch });
@@ -460,7 +338,7 @@ export default function App() {
         setSavePrompt(false); // close the confirm modal so the toast / red Save button are visible
       }
     })();
-  }, [source, baseline, baseMap, deletedIds, gated, service, identity, activePr, saveMessage, expireSession]);
+  }, [ready, concepts, baseMap, deletedIds, gated, service, identity, activePr, saveMessage, dispatch, expireSession]);
 
   const dismissSaveError = useCallback(() => setSaveError(null), []);
 
@@ -468,10 +346,12 @@ export default function App() {
   // ungated in local-only mode (no service), otherwise only while signed in.
   const canEdit = !service || !!identity;
 
-  // Filtering searches the WHOLE dictionary (source.all()) and shows every match unpaged; clearing the
-  // filter resumes the paged prefix (`rows`).
+  // Filtering searches the WHOLE dictionary and shows every match unpaged; clearing the filter resumes
+  // the paged prefix.
   const filtering = filter.trim() !== '';
-  const visible = filtering && source ? source.all().filter((c) => conceptMatches(c, filter)) : rows;
+  const visible = filtering ? concepts.filter((c) => conceptMatches(c, filter)) : concepts.slice(0, loadedCount);
+  // All concept names — the editor highlights an alias that names a known concept.
+  const knownSlugs = useMemo(() => new Set(concepts.map((c) => c.slug)), [concepts]);
 
   return (
     <div className="app">
@@ -489,7 +369,7 @@ export default function App() {
             {filtering
               ? `${visible.length.toLocaleString()} match${visible.length === 1 ? '' : 'es'}`
               : `${total.toLocaleString()} concepts${
-                  source && rows.length < total ? ` · ${rows.length.toLocaleString()} loaded` : ''
+                  ready && loadedCount < total ? ` · ${loadedCount.toLocaleString()} loaded` : ''
                 }`}
           </span>
           <span className="session-status">
@@ -536,9 +416,9 @@ export default function App() {
       )}
 
       <div className="body">
-        {error && <p className="error">{error}</p>}
-        {!source && !error && <p className="status">Loading dictionary…</p>}
-        {source && (
+        {dict.error && <p className="error">{dict.error}</p>}
+        {!ready && !dict.error && <p className="status">Loading dictionary…</p>}
+        {ready && (
           <ConceptTable
             data={visible}
             total={filtering ? visible.length : total}
@@ -599,7 +479,7 @@ export default function App() {
               onSave={handleSave}
               onDelete={creating ? undefined : handleDelete} // nothing to delete for a brand-new row
               onCancel={closeModal}
-              knownSlugs={source?.slugSet()}
+              knownSlugs={knownSlugs}
             />
           </Suspense>
         )}
