@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createSeedSource, createSource, type ConceptSource } from './data/source';
 import { loadDictionary } from './data/loadDictionary';
-import { loadEdits, recordEdit } from './data/editCache';
+import { loadEdits, recordEdit, clearEdits } from './data/editCache';
 import { conceptId } from './data/conceptId';
 import { ConceptTable } from './components/ConceptTable';
 import {
@@ -17,7 +17,8 @@ import {
   type Identity,
 } from './github/auth';
 import { repoConfigFromEnv, serviceConfigFromEnv } from './github/config';
-import { submitToService } from './github/submitClient';
+import { resetSession, submitToService } from './github/submitClient';
+import { clearPr, fetchPullState, loadPr, savePr, type ActivePr } from './github/prSession';
 import type { Concept } from './types';
 import './App.css';
 
@@ -46,6 +47,9 @@ export default function App() {
   const [editing, setEditing] = useState<Concept | null>(null);
   const [conflicts, setConflicts] = useState<string[]>([]);
   const [total, setTotal] = useState(0); // row count (set on load, decremented on delete)
+  // The PR the user's branch terminates in; when it closes/merges we reset the session and reload.
+  const [activePr, setActivePr] = useState<ActivePr | null>(() => loadPr(localStorage));
+  const [reloadKey, setReloadKey] = useState(0); // bump to force a fresh dictionary load
   const loadingRef = useRef(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
@@ -113,7 +117,36 @@ export default function App() {
     return () => {
       live = false;
     };
-  }, [repo, handle]);
+  }, [repo, handle, reloadKey]);
+
+  // When the user's working PR is closed or merged, end the session: ask the service to delete the
+  // (now stale) intent/<handle> branch, drop local edits, and reload clean from the base branch. Checked
+  // on mount and whenever the tab regains focus (e.g. after closing the PR on GitHub in another tab).
+  const resetIfPrClosed = useCallback(async () => {
+    if (!service || !repo || !identity || !activePr) return;
+    if ((await fetchPullState(repo.owner, repo.repo, activePr.number)) !== 'closed') return;
+    try {
+      await resetSession(service.serviceUrl, identity.jwt); // delete the branch (best-effort)
+    } catch {
+      /* lazy cleanup on the next /submit covers a failed reset */
+    }
+    clearEdits(localStorage);
+    clearPr(localStorage);
+    const closed = activePr.number;
+    setActivePr(null);
+    setSubmitState(`PR #${closed} closed — started a fresh session.`);
+    setReloadKey((k) => k + 1);
+  }, [service, repo, identity, activePr]);
+
+  useEffect(() => {
+    // resetIfPrClosed setStates only AFTER an async PR-status fetch (an external-state check), never
+    // synchronously — the rule can't see past the await, so the warning is a false positive here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void resetIfPrClosed();
+    const onFocus = () => void resetIfPrClosed();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [resetIfPrClosed]);
 
   // Page the next chunk in on demand; guarded so overlapping scroll events don't double-fetch.
   const loadMore = useCallback(async () => {
@@ -145,6 +178,8 @@ export default function App() {
 
   const signOut = useCallback(() => {
     clearIdentity(localStorage);
+    clearPr(localStorage);
+    setActivePr(null);
     setIdentity(null);
     setSubmitState(null);
   }, []);
@@ -186,6 +221,8 @@ export default function App() {
             content: source.serialize(),
             message: `${message} (proposed by @${identity.handle})`,
           });
+          savePr(localStorage, { number: prNumber, url: prUrl }); // track it so we can detect closure
+          setActivePr({ number: prNumber, url: prUrl });
           setSubmitState(`PR #${prNumber}`);
           window.open(prUrl, '_blank', 'noopener');
         } catch (e) {

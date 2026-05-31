@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { createHandlers } from './handlers.js';
-import { exchangeCode, loginFor, makeBotOctokit, makeSubmit } from './github.js';
+import { exchangeCode, loginFor, makeBotOctokit, makeReset, makeSubmit } from './github.js';
 import { makeSession } from './session.js';
 
 const env = process.env;
@@ -18,13 +18,16 @@ const octokit = makeBotOctokit({
   privateKey,
   installationId: need('GH_INSTALLATION_ID'),
 });
+const owner = need('REPO_OWNER');
+const repo = need('REPO_NAME');
 const submit = makeSubmit({
   octokit,
-  owner: need('REPO_OWNER'),
-  repo: need('REPO_NAME'),
+  owner,
+  repo,
   baseBranch: env.BASE_BRANCH || 'main',
   filePath: env.FILE_PATH || 'open.yml',
 });
+const reset = makeReset({ octokit, owner, repo });
 const session = makeSession(need('JWT_SECRET'));
 
 const handlers = createHandlers({
@@ -34,6 +37,7 @@ const handlers = createHandlers({
   signSession: session.signSession,
   verifySession: session.verifySession,
   submit,
+  reset,
 });
 
 const app = Fastify({ logger: true });
@@ -55,5 +59,6 @@ const wrap = (fn) => async (req, reply) => {
 app.get('/health', async () => ({ ok: true }));
 app.post('/auth', wrap((req) => handlers.auth(req.body)));
 app.post('/submit', wrap((req) => handlers.submit({ authorization: req.headers.authorization, body: req.body })));
+app.post('/reset', wrap((req) => handlers.reset({ authorization: req.headers.authorization })));
 
 await app.listen({ port: Number(env.PORT) || 8787, host: '127.0.0.1' });

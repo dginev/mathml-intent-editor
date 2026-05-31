@@ -8,6 +8,7 @@
  *   signSession(handle) -> jwt               // our identity JWT
  *   verifySession(jwt) -> { handle }         // throws if invalid
  *   submit({ handle, content, message }) -> { prNumber, prUrl }   // bot commit + PR
+ *   reset({ handle }) -> { deleted }         // bot deletes the stale intent/<handle> branch
  * }
  */
 export function createHandlers(deps) {
@@ -38,6 +39,18 @@ export function createHandlers(deps) {
       if (!body || typeof body.content !== 'string') throw fail(400, 'missing content');
       const message = body.message || `Update open.yml (proposed by @${handle})`;
       return deps.submit({ handle, content: body.content, message });
+    },
+
+    /** POST /reset — verify identity, then the bot deletes the caller's stale `intent/<handle>` branch. */
+    async reset({ authorization }) {
+      const jwt = (authorization || '').replace(/^Bearer\s+/i, '');
+      let handle;
+      try {
+        handle = deps.verifySession(jwt).handle;
+      } catch {
+        throw fail(401, 'invalid session');
+      }
+      return deps.reset({ handle });
     },
   };
 }

@@ -19,3 +19,23 @@ export async function submitToService(
   }
   return (await res.json()) as { prNumber: number; prUrl: string };
 }
+
+/**
+ * Tell the service to delete the caller's `intent/<handle>` branch (called when the client detects the
+ * branch's PR was closed/merged) so the next edit starts a fresh branch off the base. JWT-authenticated.
+ */
+export async function resetSession(
+  serviceUrl: string,
+  jwt: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ deleted: boolean }> {
+  const res = await fetchImpl(`${serviceUrl}/reset`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${jwt}` },
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error || `Reset failed: ${res.status}`);
+  }
+  return (await res.json()) as { deleted: boolean };
+}

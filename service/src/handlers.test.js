@@ -4,7 +4,7 @@ import { createHandlers } from './handlers.js';
 
 // Fake dependencies — no network, no Fastify. We verify the route logic in isolation.
 function deps(overrides = {}) {
-  const calls = { submit: [] };
+  const calls = { submit: [], reset: [] };
   const base = {
     exchangeCode: async (code) => `user-token-for-${code}`,
     loginFor: async (token) => (token === 'user-token-for-CODE' ? 'dginev' : 'someone'),
@@ -17,6 +17,10 @@ function deps(overrides = {}) {
     submit: async (arg) => {
       calls.submit.push(arg);
       return { prNumber: 7, prUrl: 'https://github.com/dginev/mathml-intent-open/pull/7' };
+    },
+    reset: async (arg) => {
+      calls.reset.push(arg);
+      return { deleted: true };
     },
     ...overrides,
   };
@@ -65,4 +69,17 @@ test('submit: defaults a commit message mentioning the handle', async () => {
   const { handlers, calls } = deps();
   await handlers.submit({ authorization: 'Bearer jwt(dginev)', body: { content: 'x' } });
   assert.match(calls.submit[0].message, /dginev/);
+});
+
+test('reset: verifies the JWT and deletes the caller’s branch', async () => {
+  const { handlers, calls } = deps();
+  const out = await handlers.reset({ authorization: 'Bearer jwt(dginev)' });
+  assert.deepEqual(out, { deleted: true });
+  assert.deepEqual(calls.reset[0], { handle: 'dginev' });
+});
+
+test('reset: rejects a missing/invalid JWT with 401', async () => {
+  const { handlers, calls } = deps();
+  await assert.rejects(() => handlers.reset({ authorization: '' }), (e) => e.status === 401);
+  assert.equal(calls.reset.length, 0);
 });

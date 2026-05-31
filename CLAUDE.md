@@ -198,7 +198,10 @@ in `service/src/github.js`.
   CSRF `state` helpers, `exchangeCodeForIdentity(serviceUrl, code)` → `{ handle, jwt }` (POSTs
   `/auth`), and identity storage (`save/load/clearIdentity`). Unit-tested.
 - `submitClient.ts` — `submitToService(serviceUrl, jwt, { content, message })` → POSTs `/submit`
-  (Bearer JWT) → `{ prNumber, prUrl }`. Unit-tested.
+  (Bearer JWT) → `{ prNumber, prUrl }`; `resetSession(serviceUrl, jwt)` → POSTs `/reset` to delete the
+  caller's branch. Unit-tested.
+- `prSession.ts` — tracks the active PR (`localStorage`) and `fetchPullState()` polls its open/closed
+  state via the **public** `api.github.com` (plain `fetch`, no token — see [client GitHub access]).
 - `config.ts` — `repoConfigFromEnv()` (`VITE_GH_OWNER`/`REPO`/`BASE`/`FILE`) and
   `serviceConfigFromEnv()` (`VITE_GH_CLIENT_ID`, `VITE_GH_SERVICE`). Either returns null → graceful
   fallback (no repo → seed fixture; no service → local-only, ungated editing). See `.env.example`.
@@ -207,6 +210,13 @@ in `service/src/github.js`.
 `App` flow: **sign in** (`/auth` → store `{handle, jwt}`) gates editing when a service is configured;
 **Save** → `submitToService` (bot commits to `intent/<handle>` + opens/updates the PR) and opens the PR
 link. Signing in reloads the dictionary with the user's branch (`handle` dep on the load effect).
+
+**Session reset on PR close.** The user's branch terminates in a PR; when that PR is closed or merged
+the session must end. `App` tracks the active PR and, on mount + window focus, polls its state
+(`fetchPullState`); if it's `closed` (merged counts), it calls `/reset` (bot deletes `intent/<handle>`),
+clears the local edit cache, and reloads from `main` — so the next edit starts a fresh branch with a
+minimal diff. `/submit` also self-heals: if the branch has no open PR it drops the stale branch before
+committing (lazy cleanup if `/reset` was missed).
 
 The service itself is in **`service/`** (Fastify, deployed on `latexml.rs` behind Caddy at
 `https://intent-api.latexml.rs`) — see `service/README.md`.
@@ -222,7 +232,8 @@ The earlier "user opens the PR with their own token" model was replaced. The agr
   "Proposed by @handle" line in the **PR body** (bot is the commit author).
 - **Backend = a Node/Fastify microservice on the `latexml.rs` VM**, behind the VM's existing **Caddy**
   (auto-HTTPS + CORS for the Pages origin). Stateless **JWT** sessions (no session store). Endpoints:
-  `/auth` (OAuth code → verified handle → JWT) and `/submit` (verify JWT → bot commits to
+  `/auth` (OAuth code → verified handle → JWT), `/reset` (verify JWT → bot deletes `intent/<handle>`),
+  and `/submit` (verify JWT → bot commits to
   `intent/<handle>` → ensure PR). **Deployed and verified** at `https://intent-api.latexml.rs`.
 - **Reads are backend-free.** The client fetches `open.yml` from `raw.githubusercontent.com` for both
   `main` (base) and the user's `intent/<handle>` branch (raw serves `ACAO: *`, so no CORS issue), plus

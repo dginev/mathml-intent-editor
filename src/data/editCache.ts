@@ -26,6 +26,11 @@ export function saveEdits(storage: Storage, edits: EditCache): void {
   storage.setItem(KEY, JSON.stringify(edits));
 }
 
+/** Drop all in-progress edits (e.g. a full session reset when the working PR is closed/merged). */
+export function clearEdits(storage: Storage): void {
+  storage.removeItem(KEY);
+}
+
 /**
  * Record (or update) the user's edit of a concept. `baseValue` is the concept's current base value,
  * captured as the ancestor on the FIRST edit only — re-edits keep the original fork point.

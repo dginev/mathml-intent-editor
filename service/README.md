@@ -7,7 +7,12 @@ PRs as our controlled bot (a GitHub App installation). Deployed on the `latexml.
 - `POST /auth` `{ code }` → `{ jwt }` — exchange the OAuth `code` (App client_id+secret), read the
   user's `@handle`, return a signed identity JWT. The user token is discarded.
 - `POST /submit` (`Authorization: Bearer <jwt>`, body `{ content, message? }`) → `{ prNumber, prUrl }`
-  — verify the JWT, then as the bot commit `content` to `intent/<handle>` and ensure the PR is open.
+  — verify the JWT, then as the bot commit `content` to `intent/<handle>` and ensure the PR is open. If
+  the branch has no open PR (its last one was closed/merged), the stale branch is dropped first so the
+  new PR is cut off the current base.
+- `POST /reset` (`Authorization: Bearer <jwt>`) → `{ deleted }` — verify the JWT, then as the bot delete
+  the caller's `intent/<handle>` branch (no-op if absent). The client calls this when it detects its PR
+  was closed/merged, so the next edit starts a fresh branch.
 - `GET /health` → `{ ok: true }`.
 
 Logic split: `handlers.js` (pure, unit-tested with `node --test`), `github.js` (Octokit + App auth),

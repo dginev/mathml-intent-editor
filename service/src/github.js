@@ -82,14 +82,35 @@ async function ensurePullRequest(octokit, owner, repo, baseBranch, branch, handl
   }
 }
 
+/** The open PR for this head branch, or null. */
+async function openPrFor(octokit, owner, repo, branch) {
+  const res = await octokit.request('GET /repos/{owner}/{repo}/pulls', {
+    owner, repo, head: `${owner}:${branch}`, state: 'open',
+  });
+  return res.data[0] ?? null;
+}
+
+/** Delete a branch ref; a no-op if it's already gone. */
+async function deleteBranch(octokit, owner, repo, branch) {
+  try {
+    await octokit.request('DELETE /repos/{owner}/{repo}/git/refs/{ref}', { owner, repo, ref: `heads/${branch}` });
+    return true;
+  } catch (e) {
+    if (status(e) === 404 || status(e) === 422) return false; // already deleted
+    throw e;
+  }
+}
+
 /**
- * Build the bot `submit` operation: commit `content` to `intent/<handle>` (creating it off the base
- * branch if needed) and ensure the PR into the base branch is open. Pushing onto an existing branch
- * auto-updates its PR. Returns `{ prNumber, prUrl }`.
+ * Build the bot `submit` operation: commit `content` to `intent/<handle>` and ensure the PR into the
+ * base branch is open. If the branch has NO open PR (its previous PR was closed/merged), the stale
+ * branch is dropped first so a fresh branch is cut off the current base — keeping the new PR's diff
+ * minimal. An open PR is left in place and pushing onto it auto-updates it. Returns `{ prNumber, prUrl }`.
  */
 export function makeSubmit({ octokit, owner, repo, baseBranch, filePath }) {
   return async function submit({ handle, content, message }) {
     const branch = `intent/${handle}`;
+    if (!(await openPrFor(octokit, owner, repo, branch))) await deleteBranch(octokit, owner, repo, branch);
     await ensureBranch(octokit, owner, repo, baseBranch, branch);
     await octokit.request('PUT /repos/{owner}/{repo}/contents/{path}', {
       owner,
@@ -102,5 +123,17 @@ export function makeSubmit({ octokit, owner, repo, baseBranch, filePath }) {
     });
     const pr = await ensurePullRequest(octokit, owner, repo, baseBranch, branch, handle);
     return { prNumber: pr.number, prUrl: pr.html_url };
+  };
+}
+
+/**
+ * Build the bot `reset` operation: delete the user's `intent/<handle>` branch (a no-op if absent). The
+ * client calls this when it detects the branch's PR was closed/merged, so the next edit starts a fresh
+ * branch off the current base. Returns `{ deleted }`.
+ */
+export function makeReset({ octokit, owner, repo }) {
+  return async function reset({ handle }) {
+    const deleted = await deleteBranch(octokit, owner, repo, `intent/${handle}`);
+    return { deleted };
   };
 }
