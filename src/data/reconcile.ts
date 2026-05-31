@@ -18,6 +18,7 @@ export type MergeResult = {
 export function contentKey(c?: Concept): string {
   if (!c) return '∅';
   return JSON.stringify([
+    c.slug, // the `concept:` key — so a rename counts as a content change
     c.en ?? null,
     c.area ?? null,
     c.arity ?? null,

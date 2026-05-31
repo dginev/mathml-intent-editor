@@ -15,15 +15,32 @@ export type ChangeKind = 'added' | 'changed' | 'deleted';
 
 export type BaseMap = ReadonlyMap<string, Concept>;
 
+/**
+ * The conceptId a row had in the baseline. Recovered from its preserved `raw` (which keeps the original
+ * `concept`/`arity` through a rename), so a renamed/re-aritied row still maps to its original entry
+ * rather than reading as a brand-new add. Falls back to the current id (brand-new rows have no `raw`).
+ */
+function baselineId(c: Concept): string {
+  const raw = c.raw;
+  if (raw && typeof raw.concept === 'string') {
+    const arity = typeof raw.arity === 'number' ? raw.arity : undefined;
+    return conceptId({ slug: raw.concept, arity });
+  }
+  return conceptId(c);
+}
+
+/** Look up a row's baseline entry by its original id, falling back to its current id (post-save). */
+const baseEntry = (c: Concept, baseMap: BaseMap): Concept | undefined =>
+  baseMap.get(baselineId(c)) ?? baseMap.get(conceptId(c));
+
 /** How a concept differs from the baseline (`null` = identical to what's already on GitHub). */
 export function classifyChange(
   concept: Concept,
   baseMap: BaseMap,
   deletedIds: ReadonlySet<string>,
 ): ChangeKind | null {
-  const id = conceptId(concept);
-  if (deletedIds.has(id)) return 'deleted';
-  const base = baseMap.get(id);
+  if (deletedIds.has(conceptId(concept))) return 'deleted';
+  const base = baseEntry(concept, baseMap);
   if (!base) return 'added';
   return contentKey(concept) !== contentKey(base) ? 'changed' : null;
 }
@@ -48,9 +65,14 @@ export function computeEdits(
   for (const c of all) {
     const id = conceptId(c);
     if (deletedIds.has(id)) continue; // a held-for-display deleted row: recorded as a tombstone below
-    const base = baseMap.get(id);
+    const baseId = baselineId(c);
+    const base = baseMap.get(baseId) ?? baseMap.get(id);
     if (!base) edits[id] = { value: c, baseAtEdit: null }; // added
-    else if (contentKey(c) !== contentKey(base)) edits[id] = { value: c, baseAtEdit: base }; // changed
+    // Key a change by its BASELINE id so a rename replaces the original entry on reload (instead of
+    // leaving the old name behind). `value` carries the new slug/arity.
+    else if (contentKey(c) !== contentKey(base)) {
+      edits[baseMap.has(baseId) ? baseId : id] = { value: c, baseAtEdit: base };
+    }
   }
   for (const id of deletedIds) {
     const base = baseMap.get(id);
