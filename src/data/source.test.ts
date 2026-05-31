@@ -38,11 +38,11 @@ describe('createSource', () => {
     expect(c1.tex).toBe('\\arg{x}{z}'); // tex kept in-memory
 
     const doc = parse(src.serialize()) as {
-      concepts: Array<{ intents: Array<{ concept: string; mathml?: string[] }> }>;
+      concepts: Array<{ intents: Array<{ concept: string; mathml?: string[]; tex?: string }> }>;
     };
     const e = doc.concepts[0].intents.find((x) => x.concept === 'c1')!;
     expect(e.mathml).toEqual(['<mi intent="x">z</mi>']);
-    expect('tex' in e).toBe(false); // tex stays local, never written to open.yml
+    expect(e.tex).toBe('\\arg{x}{z}'); // tex is now persisted to open.yml
   });
 
   it('removes a row by id and decrements total', async () => {

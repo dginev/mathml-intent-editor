@@ -54,7 +54,9 @@ concepts:
 
 Mapping to `Concept` (`src/types.ts`): `concept→slug`, `urls→links`, plus `arity`/`property`; the
 original entry is kept in `raw` for **lossless** serialization (preserves `notation*`/`comments`/key
-order). `Concept.tex` (editor-authored TeX) is **local-only** — never written to `open.yml`.
+order). `Concept.tex` (editor-authored TeX) **is persisted** as `tex:` when present (round-trips via
+parse/serialize, and counts toward content identity) — a decision (per @dginev) to add this field to
+the shared file rather than keep TeX local-only.
 
 Key facts (verified against the real file, 1012 entries):
 - A concept **name can be overloaded across arities** (`disjoint-union` 1&2, `whittaker-function` 2&3).
@@ -249,8 +251,9 @@ The earlier "user opens the PR with their own token" model was replaced. The agr
   sides surface as conflicts.
 - **Data repo = public `dginev/mathml-intent-open`**, **single `open.yml`** (fetched whole, rendered
   lazily, rewritten whole). Revisit splitting if conflicts become real.
-- **TeX round-trip: store both, MathML canonical.** Implemented — `Concept.tex` holds the primary
-  notation's source so re-edits reopen it; seed entries lack `tex` and re-author from blank.
+- **TeX round-trip: store both, MathML canonical.** `Concept.tex` holds the primary notation's source;
+  it is **written to `open.yml` as `tex:`** (when present) and read back, so re-edits reopen it. Seed
+  entries lack `tex` and re-author from blank.
 - **Hosting: app on GitHub Pages** (Actions deploy; `BASE_PATH=/<repo>/`).
 
 **Status:** built and wired end-to-end — raw-read + three-way reconcile data layer, the Fastify service
