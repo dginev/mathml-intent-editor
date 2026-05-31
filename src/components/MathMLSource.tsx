@@ -28,6 +28,42 @@ function tokenizeAttrs(body: string): Tok[] {
   return toks;
 }
 
+/**
+ * Pretty-print serialized (single-line) MathML: one element per line, indented by depth. Leaf
+ * elements (an opening tag whose only child is text) stay inline as `<mi>n</mi>`. Tag text is
+ * preserved verbatim — quote style and content are untouched — so this is purely cosmetic.
+ */
+function formatMathml(src: string): string {
+  const parts = src.match(/<\/?[a-zA-Z][^>]*>|[^<]+/g) ?? [src];
+  const lines: string[] = [];
+  let depth = 0;
+  const pad = (d: number) => '  '.repeat(Math.max(0, d));
+  for (let i = 0; i < parts.length; i++) {
+    const tok = parts[i].trim();
+    if (tok === '') continue;
+    if (tok.startsWith('</')) {
+      depth -= 1;
+      lines.push(pad(depth) + tok);
+    } else if (tok.endsWith('/>')) {
+      lines.push(pad(depth) + tok); // self-closing
+    } else if (tok.startsWith('<')) {
+      const next = parts[i + 1];
+      const after = parts[i + 2];
+      const isLeaf = next != null && next[0] !== '<' && (after?.trim().startsWith('</') ?? false);
+      if (isLeaf) {
+        lines.push(pad(depth) + tok + next + after!.trim()); // open + text + close on one line
+        i += 2;
+      } else {
+        lines.push(pad(depth) + tok);
+        depth += 1;
+      }
+    } else {
+      lines.push(pad(depth) + tok); // stray text between elements
+    }
+  }
+  return lines.join('\n');
+}
+
 function tokenize(src: string): Tok[] {
   const toks: Tok[] = [];
   for (const seg of src.match(/<\/?[a-zA-Z][^>]*>|[^<]+/g) ?? []) {
@@ -53,7 +89,7 @@ function tokenize(src: string): Tok[] {
  * emphasized — complements the rendered preview by showing exactly what will be written.
  */
 export function MathMLSource({ markup }: { markup: string }) {
-  const toks = useMemo(() => tokenize(markup), [markup]);
+  const toks = useMemo(() => tokenize(formatMathml(markup)), [markup]);
   return (
     <pre className="mathml-source" data-testid="mathml-source">
       <code>
