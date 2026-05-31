@@ -55,6 +55,25 @@ export async function exchangeCodeForIdentity(
   return { handle: data.handle, jwt: data.jwt };
 }
 
+/**
+ * Sliding session: exchange a still-valid identity JWT for a fresh-TTL one at the service's `/renew`,
+ * with no GitHub round-trip. Throws (incl. 401 if the token is already expired/invalid) on failure.
+ */
+export async function renewIdentity(
+  serviceUrl: string,
+  jwt: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<Identity> {
+  const res = await fetchImpl(`${serviceUrl}/renew`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${jwt}` },
+  });
+  if (!res.ok) throw new Error(`Renew failed: ${res.status}`);
+  const data = (await res.json()) as Partial<Identity>;
+  if (!data.jwt || !data.handle) throw new Error('Renew response missing jwt/handle');
+  return { handle: data.handle, jwt: data.jwt };
+}
+
 export function saveIdentity(storage: Storage, identity: Identity): void {
   storage.setItem(IDENTITY_KEY, JSON.stringify(identity));
 }

@@ -4,8 +4,12 @@ A small Fastify service that holds the secrets the browser can't: it finishes Gi
 PRs as our controlled bot (a GitHub App installation). Deployed on the `latexml.rs` VM behind Caddy.
 
 ## Endpoints
-- `POST /auth` `{ code }` → `{ jwt }` — exchange the OAuth `code` (App client_id+secret), read the
-  user's `@handle`, return a signed identity JWT. The user token is discarded.
+- `POST /auth` `{ code }` → `{ jwt, handle }` — exchange the OAuth `code` (App client_id+secret), read
+  the user's `@handle`, return a signed identity JWT (sliding **7-day** TTL). The user token is discarded.
+- `POST /renew` (`Authorization: Bearer <jwt>`) → `{ jwt, handle }` — sliding session: verify the
+  still-valid token and re-issue a fresh-TTL one (no GitHub round-trip). An expired token can't renew
+  (→ 401), so an absence longer than the TTL forces a re-auth. The client calls this on each visit once
+  the token has aged past its first day.
 - `POST /submit` (`Authorization: Bearer <jwt>`, body `{ content, message? }`) → `{ prNumber, prUrl }`
   — verify the JWT, then as the bot commit `content` to `intent/<handle>` and ensure the PR is open. If
   the branch has no open PR (its last one was closed/merged), the stale branch is dropped first so the

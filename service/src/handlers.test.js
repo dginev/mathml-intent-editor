@@ -83,3 +83,14 @@ test('reset: rejects a missing/invalid JWT with 401', async () => {
   await assert.rejects(() => handlers.reset({ authorization: '' }), (e) => e.status === 401);
   assert.equal(calls.reset.length, 0);
 });
+
+test('renew: re-issues a fresh JWT for the same handle on a valid session', async () => {
+  const { handlers } = deps();
+  const out = await handlers.renew({ authorization: 'Bearer jwt(dginev)' });
+  assert.deepEqual(out, { jwt: 'jwt(dginev)', handle: 'dginev' });
+});
+
+test('renew: rejects a missing/invalid (e.g. expired) JWT with 401', async () => {
+  const { handlers } = deps();
+  await assert.rejects(() => handlers.renew({ authorization: 'Bearer nope' }), (e) => e.status === 401);
+});
