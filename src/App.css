@@ -273,6 +273,11 @@
 .legend-pop .legend {
   margin: 0;
 }
+/* The macro legend (Notation TeX) needs room for the long \intent example. */
+.legend-pop:has(.legend) {
+  min-width: min(36rem, 98vw);
+  max-width: min(36rem, 98vw);
+}
 .legend-note {
   margin: 0;
   font-size: 0.8rem;
