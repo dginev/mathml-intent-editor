@@ -1,0 +1,89 @@
+# Synthetic dev/e2e fixture — NOT the real Intent Open list (that lives in dginev/mathml-intent-open;
+# the editor does not own it). A handful of representative entries, cloned ×DEV_MULTIPLIER to exercise
+# the table at the 10k+ row target, and used by canonical.test.ts to guard the round-trip invariants
+# (overloaded arities, unmodeled legacy fields, multilingual speech, quoting, list values).
+concepts:
+  - title: Open Concepts
+    intents:
+
+      - concept: power
+        arity: 2
+        en: $1 to the $2
+        de: $1 hoch $2
+        property: indexed
+        area: arithmetic
+        mathml:
+          - "<math><msup><mi arg='1'>x</mi><mi arg='2'>n</mi></msup></math>"
+        urls:
+          - https://en.wikipedia.org/wiki/Exponentiation
+        alias:
+          - exponentiation
+
+      - concept: abelian-category
+        arity: 0
+        en: abelian category
+        property: symbol
+        area: "category theory"
+        mathml:
+          - "<math><mi intent='abelian-category'>Ab</mi></math>"
+        urls:
+          - https://mathworld.wolfram.com/AbelianCategory.html
+
+      - concept: disjoint-union
+        arity: 2
+        en: disjoint union of $1 and $2
+        property: infix
+        area: set theory
+        mathml:
+          - "<math><mrow intent='disjoint-union($1,$2)'><mi arg='1'>A</mi><mo>⊔</mo><mi arg='2'>B</mi></mrow></math>"
+
+      - concept: disjoint-union
+        arity: 1
+        en: disjoint union over $1
+        property: prefix
+        area: set theory
+        notationa: "mo ⊔"
+        mathml:
+          - "<math><mrow intent='disjoint-union($1)'><mo>⊔</mo><mi arg='1'>A</mi></mrow></math>"
+
+      - concept: additive-inverse
+        arity: 1
+        en: additive inverse of $1
+        fr: opposé de $1
+        property: prefix
+        area: algebra
+        mathml:
+          - "<math><mrow intent='additive-inverse($1)'><mo>-</mo><mi arg='1'>n</mi></mrow></math>"
+
+      - concept: ratio
+        arity: 2
+        en: ratio of $1 to $2
+        property: infix
+        area: arithmetic
+        mathml:
+          - "<math><mfrac intent='ratio($1,$2)'><mi arg='1'>a</mi><mi arg='2'>b</mi></mfrac></math>"
+
+      - concept: square-root
+        arity: 1
+        en: square root of $1
+        property: prefix
+        area: arithmetic
+        mathml:
+          - "<math><msqrt intent='square-root($1)'><mi arg='1'>x</mi></msqrt></math>"
+
+      - concept: factorial
+        arity: 1
+        en: $1 factorial
+        property: postfix
+        area: combinatorics
+        mathml:
+          - "<math><mrow intent='factorial($1)'><mi arg='1'>n</mi><mo>!</mo></mrow></math>"
+
+      - concept: imaginary-unit
+        arity: 0
+        en: imaginary unit
+        property: symbol
+        area: "complex analysis"
+        comments: legacy entry
+        mathml:
+          - "<math><mi intent='imaginary-unit'>i</mi></math>"

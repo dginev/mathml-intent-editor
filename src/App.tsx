@@ -26,8 +26,8 @@ const NotationEditor = lazy(() =>
   import('./components/NotationEditor').then((m) => ({ default: m.NotationEditor })),
 );
 
-/** Clone the ~1k-concept seed up to this many times to exercise the table at the 10k+ row target. */
-const DEV_MULTIPLIER = 10;
+/** Clone the small synthetic seed fixture this many times to exercise the table at the 10k+ row target. */
+const DEV_MULTIPLIER = 1200;
 /** Rows fetched per page — the initial load and each page-down increment (~a couple of viewports). */
 const PAGE = 50;
 
