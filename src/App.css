@@ -577,6 +577,45 @@
   box-sizing: border-box;
 }
 
+/* Additional notations: a raw-MathML textarea beside its live preview, one per extra rendering. */
+.notation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.notation-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+.notation-row .extra-notation {
+  flex: 1;
+  min-width: 0;
+}
+.notation-row .extra-preview {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  overflow: auto;
+  padding: 0.25rem 0;
+}
+.notation-row .icon-btn {
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0.2rem 0.3rem;
+  border-radius: 4px;
+}
+.notation-row .icon-btn:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
 /* Links: one input per URL, clickable when not being edited. */
 .link-list {
   display: flex;
