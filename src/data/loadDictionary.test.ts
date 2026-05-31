@@ -66,6 +66,17 @@ describe('loadDictionary', () => {
     expect(concepts.map((c) => c.slug)).toContain('extra');
   });
 
+  it('drops a concept the user deleted locally (null tombstone)', async () => {
+    const edits: EditCache = {
+      'power#': { value: null, baseAtEdit: { slug: 'power', mathml: ['p'], links: [], alias: [] } as Concept },
+    };
+    const { concepts, conflicts } = await loadDictionary(
+      args({ fetchImpl: fetchFor({ power: 'p', sum: 's' }), edits }),
+    );
+    expect(concepts.map((c) => c.slug)).toEqual(['sum']); // power removed
+    expect(conflicts).toEqual([]);
+  });
+
   it('keeps overloaded concepts (same name, different arity) as distinct rows', async () => {
     const yaml = w3cYaml([
       { concept: 'disjoint-union', arity: 1, mathml: ['<math>u1</math>'] },
