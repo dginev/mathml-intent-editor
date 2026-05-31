@@ -32,7 +32,7 @@ const toMap = (concepts: Concept[]): ConceptMap =>
  */
 export async function loadDictionary(
   args: LoadArgs,
-): Promise<{ concepts: Concept[]; conflicts: string[] }> {
+): Promise<{ concepts: Concept[]; conflicts: string[]; base: Concept[] }> {
   const { owner, repo, baseBranch, filePath, handle, edits = {}, fetchImpl } = args;
 
   const base = (await fetchDictionary(rawUrl(owner, repo, baseBranch, filePath), fetchImpl)) ?? [];
@@ -42,7 +42,10 @@ export async function loadDictionary(
     ? ((await fetchDictionary(rawUrl(owner, repo, `intent/${handle}`, filePath), fetchImpl)) ?? null)
     : null;
 
-  const ours: ConceptMap = { ...(branch ? toMap(branch) : baseMap) };
+  // The GitHub working point the user's session forks from — their branch if it exists, else main.
+  // This is the baseline the editor compares against: "dirty" = the working set differs from this.
+  const workingMap: ConceptMap = branch ? toMap(branch) : baseMap;
+  const ours: ConceptMap = { ...workingMap };
   const ancestor: ConceptMap = { ...baseMap };
 
   for (const [id, rec] of Object.entries(edits)) {
@@ -54,5 +57,5 @@ export async function loadDictionary(
 
   const { merged, conflicts } = threeWayMerge(ancestor, ours, baseMap);
   const concepts = Object.values(merged).sort(byConcept); // canonical ASCII order
-  return { concepts, conflicts };
+  return { concepts, conflicts, base: Object.values(workingMap).sort(byConcept) };
 }

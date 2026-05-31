@@ -111,8 +111,10 @@
   position: relative;
 }
 
-/* Content-width table, centred on wide screens; scrolls horizontally when narrower than the viewport. */
+/* Content-width table, centred on wide screens; scrolls horizontally when narrower than the viewport.
+   width:max-content lets the phantom header-actions column size the table to include the buttons. */
 .table-inner {
+  width: max-content;
   margin-inline: auto;
 }
 
@@ -155,7 +157,7 @@
   outline-offset: -2px;
 }
 
-/* ---- layout: a toolbar above a single table that fills the body ---- */
+/* ---- layout: a single table that fills the body (its actions live in the header) ---- */
 .body {
   flex: 1 1 auto;
   display: flex;
@@ -168,41 +170,47 @@
   min-height: 0; /* let the scroll container shrink inside the flex column */
 }
 
-/* Toolbar above the table: Add entry + the batch Save, top-right. */
-.body-toolbar {
-  flex: none;
+/* Phantom rightmost header column holding Add entry + the batch Save — slim, flush to the table edge,
+   and sticky with the header. Overrides the dimmed/clipped text styling the shared .th rule applies. */
+.th.th-actions {
+  flex: 0 0 auto;
   display: flex;
-  justify-content: flex-end;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.5rem 0;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  padding: 0 0.6rem;
+  opacity: 1;
+  overflow: visible;
 }
 .add-entry {
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
   font: inherit;
-  font-size: 0.85rem;
-  padding: 0.4rem 0.8rem;
-  border-radius: 8px;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
   cursor: pointer;
+  white-space: nowrap;
 }
 .add-entry:hover {
   border-color: var(--accent);
+  color: var(--accent);
 }
 .save-batch {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
   border: 1px solid var(--accent);
   background: var(--accent);
   color: var(--accent-text);
   font: inherit;
   font-weight: 600;
-  font-size: 1rem;
-  padding: 0.55rem 1.6rem;
-  border-radius: 8px;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.7rem;
+  border-radius: 6px;
   cursor: pointer;
+  white-space: nowrap;
 }
 .save-batch:hover:not(:disabled) {
   background: var(--accent-hover);
@@ -213,7 +221,7 @@
   cursor: not-allowed;
 }
 
-/* Per-row delete (✗) and the red pre-confirm flash. */
+/* Per-row delete/restore (✗ / ↺). */
 .row-x {
   border: 0;
   background: none;
@@ -225,13 +233,23 @@
   border-radius: 4px;
 }
 .row-x:hover {
-  color: var(--danger-text);
-  background: var(--danger-bg);
+  color: var(--text);
+  background: var(--hover);
 }
-.tbody .tr.row-deleting {
-  background: var(--danger-bg);
-  outline: 2px solid var(--danger-text);
-  outline-offset: -2px;
+
+/* Pending-change row tints (kept visible until Save): added = green, changed = the Save purple,
+   deleted = red. Listed after :hover so they win at equal specificity and stay legible on hover. */
+.tbody .tr.row-added,
+.tbody .tr.row-added:hover {
+  background: var(--diff-add-bg);
+}
+.tbody .tr.row-changed,
+.tbody .tr.row-changed:hover {
+  background: var(--diff-changed-bg);
+}
+.tbody .tr.row-deleted,
+.tbody .tr.row-deleted:hover {
+  background: var(--diff-del-bg);
 }
 
 /* ---- edit modal (native <dialog>, auto-centred by the UA) ---- */

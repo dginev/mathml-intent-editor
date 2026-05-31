@@ -1,38 +1,54 @@
-import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import ISO6391 from 'iso-639-1';
 import { missingSpeechRefs, texToIntent, unusedArgRefs } from '../render/intent';
 import { loadTemml, type TemmlEngine } from '../render/temmlEngine';
 import { MathML } from './MathML';
 import { MathMLSource } from './MathMLSource';
+import { IconButton, InfoPopover, RowControls } from './ui';
 import type { Concept } from '../types';
 
 /** One editable speech template row: a stable id, an ISO 639-1 language code, the template, and edit state. */
 type SpeechRow = { id: number; lang: string; text: string; editing: boolean };
 
+/** One editable link/alias row: a stable id (edit state survives add/remove), its value, and edit state. */
+type EditRow = { id: number; value: string; editing: boolean };
+
 /** All ISO 639-1 codes, for the language autocomplete (`<datalist>`). */
 const LANG_CODES = ISO6391.getAllCodes();
 
-/** One editable entry (a link or an alias): a stable id (edit state survives add/remove), its value,
- *  and whether it's currently open for editing. */
-type EditRow = { id: number; value: string; editing: boolean };
-
 const NO_SLUGS: ReadonlySet<string> = new Set();
 
-/** Row-list state helpers shared by the Links and Aliases editors. New rows get `max(id)+1` — stable
- *  and unique among current rows, computed inside the (deferred) updater so no render-time ref is needed. */
-function rowOps(setRows: Dispatch<SetStateAction<EditRow[]>>) {
-  return {
-    setValue: (id: number, value: string) =>
-      setRows((rows) => rows.map((r) => (r.id === id ? { ...r, value } : r))),
-    setEditing: (id: number, editing: boolean) =>
-      setRows((rows) => rows.map((r) => (r.id === id ? { ...r, editing } : r))),
-    add: () =>
-      setRows((rows) => [
-        ...rows,
-        { id: rows.reduce((m, r) => Math.max(m, r.id), -1) + 1, value: '', editing: true },
-      ]),
-    remove: (id: number) => setRows((rows) => rows.filter((r) => r.id !== id)),
-  };
+/** Next stable row id: one past the current max, so it stays unique as rows are added/removed. */
+const nextId = (rows: { id: number }[]) => rows.reduce((m, r) => Math.max(m, r.id), -1) + 1;
+
+/** A fresh link/alias row (blank, open for editing). */
+const blankEntry = () => ({ value: '' });
+/** A fresh speech row — the first one defaults to English, later ones start with an empty code. */
+const blankSpeech = (rows: SpeechRow[]) => ({
+  lang: rows.some((r) => r.lang.trim() === 'en') ? '' : 'en',
+  text: '',
+});
+
+/**
+ * State + operations for one of the editor's row lists (links, aliases, speech). `patch` updates any
+ * subset of a row's fields, `add` appends a fresh row (from `blank`) open for editing, `remove` drops
+ * one. New ids are computed inside the (deferred) updater, so no render-time ref is needed.
+ */
+function useRowList<T extends { id: number; editing: boolean }>(
+  init: () => T[],
+  blank: (rows: T[]) => Omit<T, 'id' | 'editing'>,
+) {
+  const [rows, setRows] = useState<T[]>(init);
+  const ops = useMemo(
+    () => ({
+      patch: (id: number, p: Partial<T>) =>
+        setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...p } : r))),
+      add: () => setRows((rs) => [...rs, { id: nextId(rs), editing: true, ...blank(rs) } as T]),
+      remove: (id: number) => setRows((rs) => rs.filter((r) => r.id !== id)),
+    }),
+    [blank],
+  );
+  return [rows, ops] as const;
 }
 
 function MacroLegend() {
@@ -98,46 +114,30 @@ export function NotationEditor({
   /** All concept names in the dictionary — an alias highlights when it names a known concept. */
   knownSlugs?: ReadonlySet<string>;
 }) {
+  const isNew = concept.slug === ''; // a brand-new row (opened via "Add entry") starts slug-less
   const [slug, setSlug] = useState(concept.slug);
   const [area, setArea] = useState(concept.area ?? '');
   const [arity, setArity] = useState(concept.arity != null ? String(concept.arity) : '');
   const [property, setProperty] = useState(concept.property ?? '');
   const [tex, setTex] = useState(concept.tex ?? '');
-  // Links & aliases are row lists keyed by a stable id (initialized to the index).
-  const [linkRows, setLinkRows] = useState<EditRow[]>(() =>
-    concept.links.map((value, i) => ({ id: i, value, editing: false })),
-  );
-  const linkOps = rowOps(setLinkRows);
 
-  const [aliasRows, setAliasRows] = useState<EditRow[]>(() =>
-    concept.alias.map((value, i) => ({ id: i, value, editing: false })),
+  const [linkRows, linkOps] = useRowList<EditRow>(
+    () => concept.links.map((value, i) => ({ id: i, value, editing: false })),
+    blankEntry,
   );
-  const aliasOps = rowOps(setAliasRows);
-
+  const [aliasRows, aliasOps] = useRowList<EditRow>(
+    () => concept.alias.map((value, i) => ({ id: i, value, editing: false })),
+    blankEntry,
+  );
   // Speech is a list of language-keyed templates; `en` is just the first entry, the rest are extra languages.
-  const [speechRows, setSpeechRows] = useState<SpeechRow[]>(() => {
+  const [speechRows, speechOps] = useRowList<SpeechRow>(() => {
     const rows: SpeechRow[] = [];
     if (concept.en != null) rows.push({ id: 0, lang: 'en', text: concept.en, editing: false });
-    for (const s of concept.speech ?? []) rows.push({ id: rows.length, lang: s.lang, text: s.text, editing: false });
+    for (const s of concept.speech ?? [])
+      rows.push({ id: rows.length, lang: s.lang, text: s.text, editing: false });
     return rows;
-  });
-  const setSpeech = (id: number, patch: Partial<SpeechRow>) =>
-    setSpeechRows((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  const addSpeech = () =>
-    setSpeechRows((rows) => [
-      ...rows,
-      {
-        id: rows.reduce((m, r) => Math.max(m, r.id), -1) + 1,
-        lang: rows.some((r) => r.lang.trim() === 'en') ? '' : 'en', // first entry defaults to English
-        text: '',
-        editing: true,
-      },
-    ]);
-  const removeSpeech = (id: number) => setSpeechRows((rows) => rows.filter((r) => r.id !== id));
+  }, blankSpeech);
 
-  const [showLegend, setShowLegend] = useState(false);
-  const [showProperties, setShowProperties] = useState(false);
-  const [showLangs, setShowLangs] = useState(false);
   // Notation is authored EITHER as TeX (rendered to MathML) OR as raw MathML, seeded with the current.
   const [mode, setMode] = useState<'tex' | 'mathml'>('tex');
   const [rawMathml, setRawMathml] = useState(concept.mathml[0] ?? '');
@@ -164,20 +164,13 @@ export function NotationEditor({
     return doc.querySelector('parsererror') ? 'Malformed XML / MathML' : null;
   }, [mode, rawMathml]);
 
-  // Resolve the active notation: its error (if any), the MathML it produces, and whether it blocks save.
-  const newMathml: string | null =
-    mode === 'tex'
-      ? hasTex
-        ? texResult?.ok
-          ? `<math>${texResult.mathml}</math>`
-          : null
-        : null // TeX blank → keep existing (handled in buildUpdated)
-      : rawMathml.trim() && !rawError
-        ? rawMathml.trim()
-        : null;
+  // Resolve the active notation per mode: the MathML it produces (null = keep the existing one), its
+  // error, and whether that error blocks saving.
+  const texMathml = mode === 'tex' && hasTex && texResult?.ok ? `<math>${texResult.mathml}</math>` : null;
+  const rawMathmlOut = mode === 'mathml' && rawMathml.trim() !== '' && !rawError ? rawMathml.trim() : null;
+  const newMathml: string | null = mode === 'tex' ? texMathml : rawMathmlOut;
   const notationError = mode === 'tex' ? (hasTex && texResult && !texResult.ok ? texResult.error : null) : rawError;
-  const notationBlocks =
-    mode === 'tex' ? hasTex && (!engine || !texResult?.ok) : !!rawError;
+  const notationBlocks = mode === 'tex' ? hasTex && (!engine || !texResult?.ok) : !!rawError;
   const canSave = slug.trim() !== '' && !notationBlocks;
 
   // What the preview + validation use: the new notation, else the concept's existing first rendering.
@@ -226,9 +219,7 @@ export function NotationEditor({
 
   return (
     <div className="notation-editor" data-testid="notation-editor">
-      <h2>
-        Edit concept: <code>{concept.slug}</code>
-      </h2>
+      <h2>{isNew ? 'Add concept' : <>Edit concept: <code>{concept.slug}</code></>}</h2>
 
       <div className="fields">
         <label className="field">
@@ -246,26 +237,12 @@ export function NotationEditor({
         <div className="field">
           <span className="field-head">
             Properties
-            <span className="info-wrap">
-              <button
-                type="button"
-                className="info-btn"
-                aria-label="Properties help"
-                aria-expanded={showProperties}
-                title="Properties help"
-                onClick={() => setShowProperties((v) => !v)}
-              >
-                ⓘ
-              </button>
-              {showProperties && (
-                <div className="legend-pop">
-                  <p className="legend-note" data-testid="properties-help">
-                    Space-separated list of notation forms — e.g.{' '}
-                    <code>symbol</code> <code>indexed</code> <code>prefix</code> <code>function</code>.
-                  </p>
-                </div>
-              )}
-            </span>
+            <InfoPopover label="Properties help">
+              <p className="legend-note" data-testid="properties-help">
+                Space-separated list of notation forms — e.g. <code>symbol</code> <code>indexed</code>{' '}
+                <code>prefix</code> <code>function</code>.
+              </p>
+            </InfoPopover>
           </span>
           <input
             data-testid="property-input"
@@ -279,27 +256,13 @@ export function NotationEditor({
       <div className="field">
         <span className="field-head">
           Speech
-          <span className="info-wrap">
-            <button
-              type="button"
-              className="info-btn"
-              aria-label="Language help"
-              aria-expanded={showLangs}
-              title="Language help"
-              onClick={() => setShowLangs((v) => !v)}
-            >
-              ⓘ
-            </button>
-            {showLangs && (
-              <div className="legend-pop">
-                <p className="legend-note" data-testid="language-help">
-                  Each template is keyed by an ISO 639-1 language code — <code>en</code> (English),{' '}
-                  <code>de</code> (German), <code>fr</code> (French)… Start typing a code to autocomplete.
-                  Speak each argument with a <code>$ref</code> (e.g. <code>$x</code>, <code>$1</code>).
-                </p>
-              </div>
-            )}
-          </span>
+          <InfoPopover label="Language help">
+            <p className="legend-note" data-testid="language-help">
+              Each template is keyed by an ISO 639-1 language code — <code>en</code> (English),{' '}
+              <code>de</code> (German), <code>fr</code> (French)… Start typing a code to autocomplete.
+              Speak each argument with a <code>$ref</code> (e.g. <code>$x</code>, <code>$1</code>).
+            </p>
+          </InfoPopover>
         </span>
         <div className="speech-list" data-testid="speech-list">
           {speechRows.map((row) =>
@@ -308,7 +271,7 @@ export function NotationEditor({
                 className="speech-row editing"
                 key={row.id}
                 onBlur={(e) => {
-                  if (!e.currentTarget.contains(e.relatedTarget as Node)) setSpeech(row.id, { editing: false });
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) speechOps.patch(row.id, { editing: false });
                 }}
               >
                 <input
@@ -319,7 +282,7 @@ export function NotationEditor({
                   value={row.lang}
                   spellCheck={false}
                   size={4}
-                  onChange={(e) => setSpeech(row.id, { lang: e.target.value })}
+                  onChange={(e) => speechOps.patch(row.id, { lang: e.target.value })}
                 />
                 <textarea
                   className="speech-input"
@@ -328,17 +291,9 @@ export function NotationEditor({
                   value={row.text}
                   spellCheck={false}
                   placeholder="additive inverse of $x"
-                  onChange={(e) => setSpeech(row.id, { text: e.target.value })}
+                  onChange={(e) => speechOps.patch(row.id, { text: e.target.value })}
                 />
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label="Remove speech"
-                  title="Remove"
-                  onClick={() => removeSpeech(row.id)}
-                >
-                  ×
-                </button>
+                <RowControls noun="speech" onRemove={() => speechOps.remove(row.id)} />
               </div>
             ) : (
               <div className="speech-row" key={row.id}>
@@ -346,28 +301,15 @@ export function NotationEditor({
                   {row.lang || '—'}
                 </span>
                 <span className="speech-text">{row.text}</span>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label="Edit speech"
-                  title="Edit"
-                  onClick={() => setSpeech(row.id, { editing: true })}
-                >
-                  ✎
-                </button>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label="Remove speech"
-                  title="Remove"
-                  onClick={() => removeSpeech(row.id)}
-                >
-                  ×
-                </button>
+                <RowControls
+                  noun="speech"
+                  onEdit={() => speechOps.patch(row.id, { editing: true })}
+                  onRemove={() => speechOps.remove(row.id)}
+                />
               </div>
             ),
           )}
-          <button type="button" className="add-link" onClick={addSpeech}>
+          <button type="button" className="add-link" onClick={speechOps.add}>
             + Add language
           </button>
         </div>
@@ -404,23 +346,9 @@ export function NotationEditor({
             </button>
           </span>
           {mode === 'tex' && (
-            <span className="info-wrap">
-              <button
-                type="button"
-                className="info-btn"
-                aria-label="Macro help"
-                aria-expanded={showLegend}
-                title="Macro help"
-                onClick={() => setShowLegend((v) => !v)}
-              >
-                ⓘ
-              </button>
-              {showLegend && (
-                <div className="legend-pop">
-                  <MacroLegend />
-                </div>
-              )}
-            </span>
+            <InfoPopover label="Macro help">
+              <MacroLegend />
+            </InfoPopover>
           )}
         </span>
         {mode === 'tex' ? (
@@ -477,11 +405,7 @@ export function NotationEditor({
           </div>
           <div className="preview-cell">
             <span className="preview-label">MathML source</span>
-            {effectiveMathml ? (
-              <MathMLSource markup={effectiveMathml} />
-            ) : (
-              <span className="hint">—</span>
-            )}
+            {effectiveMathml ? <MathMLSource markup={effectiveMathml} /> : <span className="hint">—</span>}
           </div>
         </div>
       )}
@@ -501,24 +425,16 @@ export function NotationEditor({
                     value={row.value}
                     spellCheck={false}
                     autoFocus
-                    onChange={(e) => linkOps.setValue(row.id, e.target.value)}
-                    onBlur={() => linkOps.setEditing(row.id, false)}
+                    onChange={(e) => linkOps.patch(row.id, { value: e.target.value })}
+                    onBlur={() => linkOps.patch(row.id, { editing: false })}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        linkOps.setEditing(row.id, false);
+                        linkOps.patch(row.id, { editing: false });
                       }
                     }}
                   />
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    aria-label="Remove link"
-                    title="Remove"
-                    onClick={() => linkOps.remove(row.id)}
-                  >
-                    ×
-                  </button>
+                  <RowControls noun="link" onRemove={() => linkOps.remove(row.id)} />
                 </div>
               ) : (
                 <div className="link-row" key={row.id}>
@@ -526,28 +442,15 @@ export function NotationEditor({
                   <a className="link-display" href={row.value} target="_blank" rel="noreferrer">
                     {row.value}
                   </a>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    aria-label="Edit link"
-                    title="Edit"
-                    onClick={() => linkOps.setEditing(row.id, true)}
-                  >
-                    ✎
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    aria-label="Remove link"
-                    title="Remove"
-                    onClick={() => linkOps.remove(row.id)}
-                  >
-                    ×
-                  </button>
+                  <RowControls
+                    noun="link"
+                    onEdit={() => linkOps.patch(row.id, { editing: true })}
+                    onRemove={() => linkOps.remove(row.id)}
+                  />
                 </div>
               ),
             )}
-            <button type="button" className="add-link" onClick={() => linkOps.add()}>
+            <button type="button" className="add-link" onClick={linkOps.add}>
               + Add link
             </button>
           </div>
@@ -566,24 +469,16 @@ export function NotationEditor({
                     spellCheck={false}
                     autoFocus
                     size={Math.max(row.value.length + 1, 8)}
-                    onChange={(e) => aliasOps.setValue(row.id, e.target.value)}
-                    onBlur={() => aliasOps.setEditing(row.id, false)}
+                    onChange={(e) => aliasOps.patch(row.id, { value: e.target.value })}
+                    onBlur={() => aliasOps.patch(row.id, { editing: false })}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        aliasOps.setEditing(row.id, false);
+                        aliasOps.patch(row.id, { editing: false });
                       }
                     }}
                   />
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    aria-label="Remove alias"
-                    title="Remove"
-                    onClick={() => aliasOps.remove(row.id)}
-                  >
-                    ×
-                  </button>
+                  <RowControls noun="alias" onRemove={() => aliasOps.remove(row.id)} />
                 </span>
               ) : (
                 // A completed alias is a chip: highlighted when it names a known concept, muted when not.
@@ -593,30 +488,15 @@ export function NotationEditor({
                   data-testid="alias-chip"
                 >
                   <span className="alias-text">{row.value}</span>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    aria-label="Edit alias"
-                    title="Edit"
-                    onClick={() => aliasOps.setEditing(row.id, true)}
-                  >
-                    ✎
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    aria-label="Remove alias"
-                    title="Remove"
-                    onClick={() => aliasOps.remove(row.id)}
-                  >
-                    ×
-                  </button>
+                  <RowControls
+                    noun="alias"
+                    onEdit={() => aliasOps.patch(row.id, { editing: true })}
+                    onRemove={() => aliasOps.remove(row.id)}
+                  />
                 </span>
               ),
             )}
-            <button type="button" className="add-alias" aria-label="Add alias" onClick={() => aliasOps.add()}>
-              +
-            </button>
+            <IconButton className="add-alias" label="Add alias" icon="+" onClick={aliasOps.add} />
           </div>
         </div>
       </div>
@@ -631,14 +511,7 @@ export function NotationEditor({
           </button>
         )}
         {onDelete && (
-          <button
-            type="button"
-            className="danger"
-            data-testid="delete"
-            onClick={() => {
-              if (confirm(`Remove concept "${concept.slug}"?`)) onDelete();
-            }}
-          >
+          <button type="button" className="danger" data-testid="delete" onClick={onDelete}>
             Delete
           </button>
         )}

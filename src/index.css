@@ -27,6 +27,10 @@
   --code-text: #16191d;
   --annot-bg: rgba(109, 40, 217, 0.12);
   --annot-text: #5b21b6; /* dark purple on the light tint */
+  /* Pending-change row tints (GitHub-style diff colours; changed = the Save accent). */
+  --diff-add-bg: #e6ffec;
+  --diff-del-bg: #ffebe9;
+  --diff-changed-bg: rgba(109, 40, 217, 0.1);
 }
 
 [data-theme='dark'] {
@@ -51,6 +55,9 @@
   --code-text: #eaecef;
   --annot-bg: rgba(139, 92, 246, 0.22);
   --annot-text: #d6c8ff; /* light lavender — high contrast on the dark tint */
+  --diff-add-bg: rgba(46, 160, 67, 0.18);
+  --diff-del-bg: rgba(248, 81, 73, 0.18);
+  --diff-changed-bg: rgba(139, 92, 246, 0.2);
 }
 
 /* Follow the OS preference only when no explicit theme has been chosen. */
@@ -77,6 +84,9 @@
     --code-text: #eaecef;
     --annot-bg: rgba(139, 92, 246, 0.22);
     --annot-text: #d6c8ff;
+    --diff-add-bg: rgba(46, 160, 67, 0.18);
+    --diff-del-bg: rgba(248, 81, 73, 0.18);
+    --diff-changed-bg: rgba(139, 92, 246, 0.2);
   }
 }
 

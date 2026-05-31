@@ -13,8 +13,9 @@ export type MergeResult = {
 /**
  * Stable identity of a concept's *file* content (order-sensitive on arrays); `undefined` = absent.
  * Excludes the editor-only `tex` (local, not in open.yml) so it never triggers a reconcile conflict.
+ * Exported so the pending-change classifier shares one definition of "content changed".
  */
-function contentKey(c?: Concept): string {
+export function contentKey(c?: Concept): string {
   if (!c) return '∅';
   return JSON.stringify([
     c.en ?? null,

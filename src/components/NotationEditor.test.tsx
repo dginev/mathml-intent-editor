@@ -108,8 +108,7 @@ describe('NotationEditor', () => {
     expect(screen.getByTestId('save')).toBeDisabled();
   });
 
-  it('deletes after confirmation', () => {
-    vi.stubGlobal('confirm', () => true);
+  it('requests deletion when the Delete button is clicked', () => {
     const onDelete = vi.fn();
     render(<NotationEditor concept={base} onSave={vi.fn()} onDelete={onDelete} />);
     fireEvent.click(screen.getByTestId('delete'));
@@ -134,6 +133,19 @@ describe('NotationEditor', () => {
     expect(screen.queryByTestId('legend')).toBeNull();
     fireEvent.click(screen.getByLabelText('Macro help'));
     expect(screen.getByTestId('legend')).toBeInTheDocument();
+  });
+
+  it('dismisses an open legend when clicking outside it', () => {
+    render(<NotationEditor concept={base} onSave={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText('Macro help'));
+    expect(screen.getByTestId('legend')).toBeInTheDocument();
+    fireEvent.pointerDown(document.body); // click anywhere outside the popover
+    expect(screen.queryByTestId('legend')).toBeNull();
+  });
+
+  it('titles the editor "Add concept" for a brand-new (slug-less) row', () => {
+    render(<NotationEditor concept={{ slug: '', mathml: [], links: [], alias: [] }} onSave={vi.fn()} />);
+    expect(screen.getByRole('heading')).toHaveTextContent('Add concept');
   });
 
   it('shows existing links as clickable anchors and re-aggregates added links on save', () => {

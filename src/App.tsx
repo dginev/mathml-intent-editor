@@ -1,9 +1,17 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createSeedSource, createSource, type ConceptSource } from './data/source';
 import { loadDictionary } from './data/loadDictionary';
-import { loadEdits, recordEdit, clearEdits } from './data/editCache';
+import { loadEdits, saveEdits, clearEdits } from './data/editCache';
 import { conceptId } from './data/conceptId';
-import { byConcept } from './data/serialize';
+import { byConcept, serializeConcepts } from './data/serialize';
+import {
+  classifyChange,
+  computeEdits,
+  deletedIdsFromEdits,
+  effectiveYaml,
+  type BaseMap,
+  type ChangeKind,
+} from './data/pendingChanges';
 import { ConceptTable } from './components/ConceptTable';
 import {
   buildAuthorizeUrl,
@@ -49,10 +57,14 @@ export default function App() {
   const [creating, setCreating] = useState(false); // the open modal is for a brand-new concept
   const [conflicts, setConflicts] = useState<string[]>([]);
   const [total, setTotal] = useState(0); // row count (set on load, decremented on delete)
-  // Edits/adds/deletes batch locally; one Save submits the whole batch as a single PR update.
-  const [dirty, setDirty] = useState(() => Object.keys(loadEdits(localStorage)).length > 0);
+  // Batch-edit session state. The working set is compared against `baseline` (the GitHub working point,
+  // serialized): `dirty` — and so the Save button — is purely content-based. Pending deletions live in
+  // `deletedIds` (the rows stay visible, rendered red) and are enacted only when the batch is saved.
+  const [baseMap, setBaseMap] = useState<BaseMap | null>(null); // baseline concepts, by conceptId
+  const [baseline, setBaseline] = useState<string | null>(null); // baseline serialized, for the dirty check
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(() => new Set());
+  const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null); // row flashed red pre-confirm
   // The PR the user's branch terminates in; when it closes/merges we reset the session and reload.
   const [activePr, setActivePr] = useState<ActivePr | null>(() => loadPr(localStorage));
   const [reloadKey, setReloadKey] = useState(0); // bump to force a fresh dictionary load
@@ -104,20 +116,31 @@ export default function App() {
   // Load the dictionary. Reloads when the signed-in handle changes (to read the user's branch).
   useEffect(() => {
     let live = true;
-    const done = (s: ConceptSource, c: string[] = []) => {
+    const done = (s: ConceptSource, base: Concept[], deleted: Set<string>, c: string[] = []) => {
       if (!live) return;
+      const baselineStr = serializeConcepts(base);
       setRows([]);
       setSource(s);
+      setBaseMap(new Map(base.map((x) => [conceptId(x), x])));
+      setBaseline(baselineStr);
+      setDeletedIds(deleted);
       setTotal(s.total);
       setConflicts(c);
+      setDirty(effectiveYaml(s.all(), deleted) !== baselineStr); // leftover unsaved edits → already dirty
     };
     if (repo) {
       loadDictionary({ ...repo, handle, edits: loadEdits(localStorage) })
-        .then(({ concepts, conflicts }) => done(createSource(concepts), conflicts))
+        .then(({ concepts, conflicts, base }) => {
+          const bMap = new Map(base.map((x) => [conceptId(x), x]));
+          const deleted = deletedIdsFromEdits(loadEdits(localStorage), bMap);
+          // Re-insert the (held-for-display) deleted baseline rows so they stay visible until a Save.
+          const display = [...concepts, ...[...deleted].map((id) => bMap.get(id)!)].sort(byConcept);
+          done(createSource(display), base, deleted, conflicts);
+        })
         .catch((e) => live && setError(String(e)));
     } else {
       createSeedSource(DEV_MULTIPLIER)
-        .then((s) => done(s))
+        .then((s) => done(s, s.all(), new Set()))
         .catch((e) => live && setError(String(e)));
     }
     return () => {
@@ -234,79 +257,109 @@ export default function App() {
     setCreating(false);
   }, []);
 
-  // "Done" — apply the edit/addition to local state only (batched); the global Save submits later.
+  // Recompute dirtiness and persist the cache after any local change. `nextDeleted` is the deletion set
+  // to apply (passed explicitly because React state updates aren't yet visible synchronously).
+  const persist = useCallback(
+    (nextDeleted: Set<string>) => {
+      if (!source || !baseMap || baseline == null) return;
+      setDeletedIds(nextDeleted);
+      setDirty(effectiveYaml(source.all(), nextDeleted) !== baseline);
+      saveEdits(localStorage, computeEdits(source.all(), nextDeleted, baseMap));
+    },
+    [source, baseMap, baseline],
+  );
+
+  // "Done" — apply the edit/addition to the in-memory source (batched); the global Save submits later.
   const handleSave = useCallback(
     (updated: Concept) => {
       if (!source) return;
       if (creating) {
         source.add(updated);
         setRows((prev) => [...prev, updated].sort(byConcept)); // show it in canonical position
-        setTotal((t) => t + 1);
-        if (repo) recordEdit(localStorage, conceptId(updated), updated, null); // brand-new → no ancestor
+        setTotal(source.total);
       } else if (editing) {
         const id = conceptId(editing); // identity when opened — stable even if the edit renames it
         source.applyEdit(id, updated);
         setRows((prev) => prev.map((c) => (conceptId(c) === id ? updated : c)));
-        if (repo) recordEdit(localStorage, id, updated, editing); // reload-safe
       }
-      setDirty(true);
+      persist(deletedIds);
       setCreating(false);
       setEditing(null);
     },
-    [editing, creating, source, repo],
+    [editing, creating, source, deletedIds, persist],
   );
 
-  // Apply a deletion to local state only (batched). Shared by the modal Delete and the row ✗.
-  const deleteConcept = useCallback(
-    (concept: Concept) => {
-      if (!source) return;
+  // Mark/unmark a row for deletion (kept visible, red, until Save). A purely-local addition has nothing
+  // on GitHub to delete, so it's dropped outright instead of being held.
+  const setDeleted = useCallback(
+    (concept: Concept, deleted: boolean) => {
+      if (!source || !baseMap) return;
       const id = conceptId(concept);
-      source.remove(id);
-      setRows((prev) => prev.filter((c) => conceptId(c) !== id));
-      setTotal((t) => Math.max(0, t - 1));
-      if (repo) recordEdit(localStorage, id, null, concept); // tombstone for reload/reconcile
-      setDirty(true);
+      if (!baseMap.has(id)) {
+        source.remove(id);
+        setRows((prev) => prev.filter((c) => conceptId(c) !== id));
+        setTotal(source.total);
+        const next = new Set(deletedIds);
+        next.delete(id);
+        persist(next);
+        return;
+      }
+      const next = new Set(deletedIds);
+      if (deleted) next.add(id);
+      else next.delete(id);
+      persist(next);
     },
-    [source, repo],
+    [source, baseMap, deletedIds, persist],
+  );
+
+  // Row ✗: toggle the pending deletion (delete ⇄ restore).
+  const toggleRowDelete = useCallback(
+    (concept: Concept) => {
+      if (!gated()) return;
+      setDeleted(concept, !deletedIds.has(conceptId(concept)));
+    },
+    [gated, deletedIds, setDeleted],
   );
 
   const handleDelete = useCallback(() => {
-    if (editing) deleteConcept(editing);
+    if (editing) setDeleted(editing, true);
     setEditing(null);
-  }, [editing, deleteConcept]);
+    setCreating(false);
+  }, [editing, setDeleted]);
 
-  // Row ✗: flash the row red, then confirm before finalizing (deferred so the red paints first).
-  const handleRowDelete = useCallback(
-    (concept: Concept) => {
-      if (!gated()) return;
-      setPendingDeleteId(conceptId(concept));
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          if (confirm(`Remove concept "${concept.slug}"?`)) deleteConcept(concept);
-          setPendingDeleteId(null);
-        }),
-      );
-    },
-    [gated, deleteConcept],
+  // Classify each row for its background colour (added / changed / pending-deleted), vs the baseline.
+  const changeKind = useCallback(
+    (c: Concept): ChangeKind | null => (baseMap ? classifyChange(c, baseMap, deletedIds) : null),
+    [baseMap, deletedIds],
   );
 
-  // Commit the whole batch to the service (bot → intent/<handle> branch + PR), when configured.
+  // Commit the whole batch to the service (bot → intent/<handle> branch + PR), when configured. On
+  // success the pushed content becomes the new baseline, so the session returns to a clean state.
   const saveBatch = useCallback(() => {
-    if (!source) return;
+    if (!source || baseline == null) return;
     if (!gated()) return;
     if (!service || !identity) return; // local-only: nothing to submit
+    const content = effectiveYaml(source.all(), deletedIds);
     void (async () => {
       try {
         setSaving(true);
         setSubmitState('Submitting…');
         const { prNumber, prUrl } = await submitToService(service.serviceUrl, identity.jwt, {
-          content: source.serialize(),
+          content,
           message: `Update open.yml (proposed by @${identity.handle})`,
         });
+        // Enact deletions, then adopt the pushed content as the new baseline (clean session).
+        for (const id of deletedIds) source.remove(id);
+        setRows((prev) => prev.filter((c) => !deletedIds.has(conceptId(c))));
+        setTotal(source.total);
+        setBaseMap(new Map(source.all().map((c) => [conceptId(c), c])));
+        setBaseline(content);
+        setDeletedIds(new Set());
+        setDirty(false);
+        saveEdits(localStorage, {});
         savePr(localStorage, { number: prNumber, url: prUrl }); // track it so we can detect closure
         setActivePr({ number: prNumber, url: prUrl });
         setSubmitState(`PR #${prNumber}`);
-        setDirty(false);
         window.open(prUrl, '_blank', 'noopener');
       } catch (e) {
         setSubmitState(`Submit failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -314,7 +367,7 @@ export default function App() {
         setSaving(false);
       }
     })();
-  }, [source, gated, service, identity]);
+  }, [source, baseline, deletedIds, gated, service, identity]);
 
   return (
     <div className="app">
@@ -378,41 +431,41 @@ export default function App() {
         {error && <p className="error">{error}</p>}
         {!source && !error && <p className="status">Loading dictionary…</p>}
         {source && (
-          <>
-            <div className="body-toolbar">
-              <button type="button" className="add-entry" onClick={openCreate}>
-                + Add entry
-              </button>
-              {service && (
-                <button
-                  type="button"
-                  className="save-batch"
-                  data-testid="save-batch"
-                  disabled={!dirty || saving}
-                  onClick={saveBatch}
-                  title={dirty ? 'Submit all pending changes as one PR' : 'No pending changes'}
-                >
-                  {saving ? (
-                    <>
-                      <span className="spinner" aria-hidden="true" /> Saving…
-                    </>
-                  ) : (
-                    'Save'
-                  )}
+          <ConceptTable
+            data={rows}
+            total={total}
+            filter={filter}
+            onSelect={openEditor}
+            onLoadMore={loadMore}
+            editingId={editing ? conceptId(editing) : null}
+            onDelete={toggleRowDelete}
+            changeKind={changeKind}
+            headerActions={
+              <>
+                <button type="button" className="add-entry" onClick={openCreate}>
+                  + Add entry
                 </button>
-              )}
-            </div>
-            <ConceptTable
-              data={rows}
-              total={total}
-              filter={filter}
-              onSelect={openEditor}
-              onLoadMore={loadMore}
-              editingId={editing ? conceptId(editing) : null}
-              onDelete={handleRowDelete}
-              pendingDeleteId={pendingDeleteId}
-            />
-          </>
+                {service && (
+                  <button
+                    type="button"
+                    className="save-batch"
+                    data-testid="save-batch"
+                    disabled={!dirty || saving}
+                    onClick={saveBatch}
+                    title={dirty ? 'Submit all pending changes as one PR' : 'No pending changes'}
+                  >
+                    {saving ? (
+                      <>
+                        <span className="spinner" aria-hidden="true" /> Saving…
+                      </>
+                    ) : (
+                      'Save'
+                    )}
+                  </button>
+                )}
+              </>
+            }
+          />
         )}
       </div>
 
