@@ -256,18 +256,37 @@
   position: relative;
   display: inline-flex;
 }
+/* Speech bubble centered above the (i), with a downward tail pointing at it. */
 .legend-pop {
   position: absolute;
-  bottom: calc(100% + 6px);
-  right: 0;
-  z-index: 20;
+  bottom: calc(100% + 10px); /* clear the tail */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
   width: max-content;
-  max-width: min(40rem, 80vw);
-  padding: 0.5rem 0.75rem;
-  background: var(--surface);
+  max-width: min(26rem, 80vw);
+  padding: 0.6rem 0.8rem;
+  background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+}
+/* tail: a fill triangle over a slightly larger border triangle */
+.legend-pop::before,
+.legend-pop::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 8px solid transparent;
+}
+.legend-pop::before {
+  border-top-color: var(--border);
+}
+.legend-pop::after {
+  border-width: 7px;
+  border-top-color: var(--surface-2);
 }
 .legend-pop .legend {
   margin: 0;
@@ -397,10 +416,10 @@
   color: var(--accent);
 }
 .mathml-source .tok-annot {
-  background: var(--hover);
-  color: var(--accent);
+  background: var(--annot-bg);
+  color: var(--annot-text);
   border-radius: 3px;
-  padding: 0 2px;
+  padding: 0 3px;
   font-weight: 600;
 }
 

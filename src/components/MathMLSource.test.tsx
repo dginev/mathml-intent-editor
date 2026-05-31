@@ -18,4 +18,13 @@ describe('MathMLSource', () => {
     expect(annots).toContain("intent='neg($x)'");
     expect(annots).toContain("arg='x'");
   });
+
+  it('pretty-prints nested elements with indentation, keeping leaves inline', () => {
+    render(
+      <MathMLSource markup={"<math><mrow intent='neg($x)'><mo>-</mo><mi arg='x'>n</mi></mrow></math>"} />,
+    );
+    expect(screen.getByTestId('mathml-source').textContent).toBe(
+      "<math>\n  <mrow intent='neg($x)'>\n    <mo>-</mo>\n    <mi arg='x'>n</mi>\n  </mrow>\n</math>",
+    );
+  });
 });

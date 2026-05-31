@@ -25,6 +25,8 @@
   --warning-text: #7a4d00; /* ~7:1 on --warning-bg */
   --code-bg: #e9ebef;
   --code-text: #16191d;
+  --annot-bg: rgba(109, 40, 217, 0.12);
+  --annot-text: #5b21b6; /* dark purple on the light tint */
 }
 
 [data-theme='dark'] {
@@ -47,6 +49,8 @@
   --warning-text: #f0d8b0;
   --code-bg: #2a2e37;
   --code-text: #eaecef;
+  --annot-bg: rgba(139, 92, 246, 0.22);
+  --annot-text: #d6c8ff; /* light lavender — high contrast on the dark tint */
 }
 
 /* Follow the OS preference only when no explicit theme has been chosen. */
@@ -71,6 +75,8 @@
     --warning-text: #f0d8b0;
     --code-bg: #2a2e37;
     --code-text: #eaecef;
+    --annot-bg: rgba(139, 92, 246, 0.22);
+    --annot-text: #d6c8ff;
   }
 }
 
