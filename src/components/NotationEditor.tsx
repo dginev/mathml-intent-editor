@@ -24,7 +24,7 @@ function MacroLegend() {
       <tbody>
         <tr>
           <td>
-            <code>{'\\arg{name}{…}'}</code>
+            <code>{'\\arg{name}'}</code>
           </td>
           <td>mark an argument</td>
           <td>
@@ -33,7 +33,7 @@ function MacroLegend() {
         </tr>
         <tr>
           <td>
-            <code>{'\\intent{expr}{…}'}</code>
+            <code>{'\\intent{expr}{notation}'}</code>
           </td>
           <td>mark an intent expression</td>
           <td>
@@ -42,7 +42,7 @@ function MacroLegend() {
         </tr>
         <tr>
           <td>
-            <code>\MathML…</code> / <code>\MML…</code>
+            <code>{'\\MathMLarg'}</code>, <code>{'\\MathMLintent'}</code>
           </td>
           <td>official aliases of the above</td>
           <td>
