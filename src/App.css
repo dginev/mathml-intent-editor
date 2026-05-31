@@ -463,6 +463,71 @@
   border-color: var(--link);
 }
 
+/* Speech: one language-keyed template per row — a compact ISO 639-1 badge + the template text. */
+.speech-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.speech-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  width: 100%;
+}
+.lang-badge {
+  flex: none;
+  min-width: 2.2rem;
+  text-align: center;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--annot-bg);
+  color: var(--annot-text);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  margin-top: 0.15rem;
+}
+.speech-text {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.85rem;
+  padding-top: 0.1rem;
+}
+.lang-input {
+  flex: none;
+  width: 3.4rem;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  padding: 0.35rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+}
+.speech-input {
+  flex: 1;
+  min-width: 0;
+}
+.speech-row .icon-btn {
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0.1rem 0.25rem;
+  margin-top: 0.2rem;
+  border-radius: 4px;
+}
+.speech-row .icon-btn:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
 /* Field heading: label + (optional) controls + (i) help. */
 .notation-head,
 .field-head {

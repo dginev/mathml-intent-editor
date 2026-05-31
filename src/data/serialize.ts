@@ -1,4 +1,5 @@
 import { stringify } from 'yaml';
+import ISO6391 from 'iso-639-1';
 import type { Concept } from '../types';
 
 /** The canonical single group title in the W3C open.yml. */
@@ -40,6 +41,18 @@ export function serializeConcepts(concepts: Concept[]): string {
     e.concept = c.slug;
     setOrDelete(e, 'arity', c.arity);
     setOrDelete(e, 'en', c.en);
+    // Localized speech: write each ISO 639-1 key (en handled above), then drop any language key that
+    // the editor removed. Only ISO codes are touched — other keys (notation*, comments…) are untouched.
+    const keepLangs = new Set<string>(['en']);
+    for (const s of c.speech ?? []) {
+      const lang = s.lang.trim();
+      if (!lang || lang === 'en' || !ISO6391.validate(lang)) continue;
+      setOrDelete(e, lang, s.text);
+      if (typeof s.text === 'string' && s.text.trim() !== '') keepLangs.add(lang);
+    }
+    for (const k of Object.keys(e)) {
+      if (ISO6391.validate(k) && !keepLangs.has(k)) delete e[k];
+    }
     setOrDelete(e, 'property', c.property);
     setOrDelete(e, 'area', c.area);
     setOrDelete(e, 'mathml', c.mathml);

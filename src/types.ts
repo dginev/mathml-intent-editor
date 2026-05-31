@@ -5,11 +5,19 @@
  * `mathml`/`urls`/`alias` (+ legacy `notation*`/`comments`). We keep that format unchanged — schema
  * changes require a W3C group decision — and round-trip unknown fields via `raw`.
  */
+/** A localized speech template, keyed by an ISO 639-1 language code (e.g. `de`, `fr`). */
+export type SpeechEntry = { lang: string; text: string };
+
 export type Concept = {
   /** kebab-case identifier (the `concept:` key). Unique per dictionary. */
   slug: string;
-  /** English speech template. Positional argument refs are written `$1`, `$2`, … */
+  /** English speech template (the `en:` key). Positional argument refs are written `$1`, `$2`, … */
   en?: string;
+  /**
+   * Speech templates in languages other than English — each serialized as its own ISO 639-1 key
+   * (`de:`, `fr:`, …) alongside `en`. English lives in `en`; this holds the rest.
+   */
+  speech?: SpeechEntry[];
   /** Subject area, e.g. "number theory". */
   area?: string;
   /** Argument count of the concept. */

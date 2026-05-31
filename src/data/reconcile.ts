@@ -24,6 +24,7 @@ function contentKey(c?: Concept): string {
     c.mathml,
     c.links,
     c.alias,
+    c.speech?.length ? c.speech : null,
   ]);
 }
 

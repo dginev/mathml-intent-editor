@@ -32,17 +32,35 @@ function rootOf(doc: Document, math: Element): Element {
  * convention) or `arg="name"`. A `$1` is satisfied by `arg="a1"` or `arg="1"`; `$name` by `arg="name"`.
  * Returns the unsatisfied refs (as `$ref` strings) — empty means the speech and notation agree.
  */
-export function missingSpeechRefs(en: string, mathml: string): string[] {
+export function missingSpeechRefs(speech: string, mathml: string): string[] {
   const args = new Set<string>();
   for (const m of mathml.matchAll(/\barg=["']([^"']+)["']/g)) args.add(m[1]);
   const missing: string[] = [];
-  for (const m of en.matchAll(/\$([A-Za-z0-9_]+)/g)) {
+  for (const m of speech.matchAll(/\$([A-Za-z0-9_]+)/g)) {
     const ref = m[1];
     const numeric = /^\d+$/.test(ref);
     const ok = args.has(ref) || (numeric && (args.has(`a${ref}`) || args.has(`_${ref}`)));
     if (!ok && !missing.includes(`$${ref}`)) missing.push(`$${ref}`);
   }
   return missing;
+}
+
+/**
+ * The inverse of {@link missingSpeechRefs}: arguments marked in the notation (`arg="…"`) that no speech
+ * `$ref` ever uses. A positional `arg="aN"`/`arg="_N"` is considered spoken by `$N` (the W3C convention),
+ * any `arg="name"` by `$name`. Returns the unused arg names — empty means every marked argument is spoken.
+ */
+export function unusedArgRefs(speech: string, mathml: string): string[] {
+  const refs = new Set<string>();
+  for (const m of speech.matchAll(/\$([A-Za-z0-9_]+)/g)) refs.add(m[1]);
+  const unused: string[] = [];
+  for (const m of mathml.matchAll(/\barg=["']([^"']+)["']/g)) {
+    const arg = m[1];
+    const positional = /^[a_](\d+)$/.exec(arg); // aN / _N → spoken as $N
+    const used = refs.has(arg) || (positional ? refs.has(positional[1]) : false);
+    if (!used && !unused.includes(arg)) unused.push(arg);
+  }
+  return unused;
 }
 
 export function texToIntent(temml: TemmlEngine, tex: string, concept: string): IntentResult {
