@@ -98,6 +98,16 @@ describe('missingSpeechRefs', () => {
     expect(missingSpeechRefs('f of $1 and $2', mathml)).toEqual(['$2']);
     expect(missingSpeechRefs('$x', '<math><mi>x</mi></math>')).toEqual(['$x']);
   });
+
+  it('allows underscore, dash and dot in ref / arg names (NCNames)', () => {
+    const mathml = "<math><mi arg='left-hand'>A</mi><mi arg='d.dt'>B</mi><mi arg='a_1'>C</mi></math>";
+    expect(missingSpeechRefs('$left-hand over $d.dt plus $a_1', mathml)).toEqual([]);
+  });
+
+  it('does not swallow trailing sentence punctuation into a ref', () => {
+    // "$1." ends a sentence → the ref is $1 (satisfied by arg="a1"); the dot is punctuation
+    expect(missingSpeechRefs('the value is $1.', "<math><mi arg='a1'>A</mi></math>")).toEqual([]);
+  });
 });
 
 describe('unusedArgRefs', () => {
@@ -113,5 +123,10 @@ describe('unusedArgRefs', () => {
 
   it('is empty when every marked argument is spoken (named refs)', () => {
     expect(unusedArgRefs('$lhs iff $rhs', "<math><mi arg='lhs'/><mi arg='rhs'/></math>")).toEqual([]);
+  });
+
+  it('matches dashed/dotted/underscored arg names to their refs', () => {
+    const mathml = "<math><mi arg='left-hand'/><mi arg='d.dt'/><mi arg='a_1'/></math>";
+    expect(unusedArgRefs('$left-hand of $d.dt and $a_1', mathml)).toEqual([]);
   });
 });
