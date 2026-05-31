@@ -23,6 +23,7 @@ import {
   parseCallback,
   randomState,
   rememberState,
+  renewIdentity,
   saveIdentity,
   secondsUntilExpiry,
   type Identity,
@@ -42,6 +43,9 @@ const NotationEditor = lazy(() =>
 const DEV_MULTIPLIER = 1200;
 /** Rows fetched per page — the initial load and each page-down increment (~a couple of viewports). */
 const PAGE = 50;
+/** Renew the session on a visit once it has dipped below this many seconds (6 of its 7 days) — keeps an
+ *  active user signed in indefinitely without renewing a token that was just minted. */
+const RENEW_BELOW_SECONDS = 6 * 24 * 60 * 60;
 
 const THEME_KEY = 'intent-editor.theme';
 type Theme = 'light' | 'dark';
@@ -223,8 +227,8 @@ export default function App() {
     setIdentity(null);
   }, []);
 
-  // Proactively sign out the instant the session JWT expires (the service signs a 12h TTL), even with
-  // no save attempt to surface a 401 first.
+  // Proactively sign out the instant the session JWT expires (the service signs a sliding TTL), even
+  // with no save attempt to surface a 401 first.
   useEffect(() => {
     if (!identity) return;
     const secs = secondsUntilExpiry(identity);
@@ -235,6 +239,30 @@ export default function App() {
     }, Math.max(0, secs) * 1000);
     return () => clearTimeout(t);
   }, [identity, expireSession]);
+
+  // Sliding session: on a visit, if a still-valid token has aged past its first day, swap it for a
+  // fresh-TTL one so active users never have to re-auth. Loop-safe (the renewed token is fresh →
+  // above the threshold) and graceful if /renew isn't deployed yet (a non-401 failure keeps the token).
+  useEffect(() => {
+    if (!service || !identity) return;
+    const secs = secondsUntilExpiry(identity);
+    if (secs == null || secs >= RENEW_BELOW_SECONDS) return; // fresh enough — no renew
+    let live = true;
+    void renewIdentity(service.serviceUrl, identity.jwt)
+      .then((id) => {
+        if (!live) return;
+        saveIdentity(localStorage, id);
+        setIdentity(id);
+      })
+      .catch((e) => {
+        // Only a rejected session means sign out; a missing endpoint / offline keeps the current token.
+        const msg = e instanceof Error ? e.message : String(e);
+        if (live && /\b401\b|invalid session|unauthor/i.test(msg)) expireSession();
+      });
+    return () => {
+      live = false;
+    };
+  }, [service, identity, expireSession]);
 
   const [theme, setTheme] = useState<Theme>(currentTheme);
   const toggleTheme = useCallback(() => {

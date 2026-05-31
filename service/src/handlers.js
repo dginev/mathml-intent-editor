@@ -52,5 +52,21 @@ export function createHandlers(deps) {
       }
       return deps.reset({ handle });
     },
+
+    /**
+     * POST /renew — sliding session: verify the *current* (still-valid) JWT and re-issue a fresh-TTL
+     * one for the same handle. No GitHub round-trip; an expired token can't renew (verify throws → 401),
+     * so absences longer than the TTL still force a re-auth.
+     */
+    async renew({ authorization }) {
+      const jwt = (authorization || '').replace(/^Bearer\s+/i, '');
+      let handle;
+      try {
+        handle = deps.verifySession(jwt).handle;
+      } catch {
+        throw fail(401, 'invalid session');
+      }
+      return { jwt: deps.signSession(handle), handle };
+    },
   };
 }

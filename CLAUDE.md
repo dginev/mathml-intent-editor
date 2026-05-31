@@ -196,7 +196,10 @@ in `service/src/github.js`.
 
 - `auth.ts` — sign-in client: `buildAuthorizeUrl` (GitHub App user OAuth, no scope), `parseCallback`,
   CSRF `state` helpers, `exchangeCodeForIdentity(serviceUrl, code)` → `{ handle, jwt }` (POSTs
-  `/auth`), and identity storage (`save/load/clearIdentity`). Unit-tested.
+  `/auth`), `renewIdentity(serviceUrl, jwt)` (POSTs `/renew` for the sliding session), and identity
+  storage (`save/load/clearIdentity`). The session JWT is a sliding **7-day** TTL: `loadIdentity` reads
+  the JWT `exp` and treats an expired token as signed-out (`isExpired`/`secondsUntilExpiry`); `App`
+  auto-signs-out at expiry and renews on a visit once the token has aged past its first day. Unit-tested.
 - `submitClient.ts` — `submitToService(serviceUrl, jwt, { content, message })` → POSTs `/submit`
   (Bearer JWT) → `{ prNumber, prUrl }`; `resetSession(serviceUrl, jwt)` → POSTs `/reset` to delete the
   caller's branch. Unit-tested.
@@ -231,8 +234,9 @@ The earlier "user opens the PR with their own token" model was replaced. The agr
   read the `@handle`) and an installation token (to commit as our controlled account). Attribution is a
   "Proposed by @handle" line in the **PR body** (bot is the commit author).
 - **Backend = a Node/Fastify microservice on the `latexml.rs` VM**, behind the VM's existing **Caddy**
-  (auto-HTTPS + CORS for the Pages origin). Stateless **JWT** sessions (no session store). Endpoints:
-  `/auth` (OAuth code → verified handle → JWT), `/reset` (verify JWT → bot deletes `intent/<handle>`),
+  (auto-HTTPS + CORS for the Pages origin). Stateless **JWT** sessions (no session store), a sliding
+  **7-day** TTL. Endpoints: `/auth` (OAuth code → verified handle → JWT), `/renew` (verify a valid JWT →
+  re-issue a fresh-TTL one), `/reset` (verify JWT → bot deletes `intent/<handle>`),
   and `/submit` (verify JWT → bot commits to
   `intent/<handle>` → ensure PR). **Deployed and verified** at `https://intent-api.latexml.rs`.
 - **Reads are backend-free.** The client fetches `open.yml` from `raw.githubusercontent.com` for both

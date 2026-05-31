@@ -8,6 +8,7 @@ import {
   loadIdentity,
   parseCallback,
   rememberState,
+  renewIdentity,
   saveIdentity,
   secondsUntilExpiry,
   type Identity,
@@ -74,6 +75,27 @@ describe('exchangeCodeForIdentity', () => {
     await expect(exchangeCodeForIdentity('s', 'c', bad)).rejects.toThrow();
     const partial = (async () => ({ ok: true, status: 200, json: async () => ({ handle: 'x' }) })) as unknown as typeof fetch;
     await expect(exchangeCodeForIdentity('s', 'c', partial)).rejects.toThrow();
+  });
+});
+
+describe('renewIdentity', () => {
+  it('POSTs the current JWT to /renew and returns the refreshed identity', async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ handle: 'dginev', jwt: 'fresh-jwt' }),
+    })) as unknown as typeof fetch;
+    const id = await renewIdentity('https://svc.example', 'old-jwt', fetchImpl);
+    expect(id).toEqual({ handle: 'dginev', jwt: 'fresh-jwt' });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://svc.example/renew',
+      expect.objectContaining({ method: 'POST', headers: { authorization: 'Bearer old-jwt' } }),
+    );
+  });
+
+  it('throws on a rejected (e.g. expired) session', async () => {
+    const bad = (async () => ({ ok: false, status: 401, json: async () => ({}) })) as unknown as typeof fetch;
+    await expect(renewIdentity('s', 'jwt', bad)).rejects.toThrow();
   });
 });
 
