@@ -173,7 +173,7 @@
   background: var(--surface);
   color: var(--text);
   padding: 1rem 1.25rem;
-  width: min(720px, 94vw); /* ~45rem — 10rem wider than before */
+  width: min(1120px, 96vw); /* at least as wide as the data table */
   max-height: 85vh;
   overflow: auto;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
@@ -243,6 +243,34 @@
   flex-direction: column;
   gap: 0.35rem;
   font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+/* Speech + Notation are full-width: their contents can be long. */
+.notation-editor .field textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Macro legend pops up ABOVE the (i) button, anchored to its right edge. */
+.info-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.legend-pop {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  width: max-content;
+  max-width: min(40rem, 80vw);
+  padding: 0.5rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+}
+.legend-pop .legend {
+  margin: 0;
 }
 
 .notation-editor textarea {
@@ -382,8 +410,8 @@
   margin-top: 1rem;
 }
 
-.notation-editor button {
-  padding: 0.45rem 1rem;
+.notation-editor .actions button {
+  padding: 0.3rem 0.8rem;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg);

@@ -11,6 +11,49 @@ const lines = (s: string): string[] =>
     .map((l) => l.trim())
     .filter(Boolean);
 
+function MacroLegend() {
+  return (
+    <table className="legend" data-testid="legend">
+      <thead>
+        <tr>
+          <th>Macro</th>
+          <th>Use</th>
+          <th>Example</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <code>{'\\arg{name}{…}'}</code>
+          </td>
+          <td>mark an argument</td>
+          <td>
+            <code>{'\\arg{argname}{value}'}</code>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <code>{'\\intent{expr}{…}'}</code>
+          </td>
+          <td>mark an intent expression</td>
+          <td>
+            <code>{'\\intent{biconditional($lhs,$rhs)}{\\arg{lhs}{A}\\iff\\arg{rhs}{B}}'}</code>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <code>\MathML…</code> / <code>\MML…</code>
+          </td>
+          <td>official aliases of the above</td>
+          <td>
+            <code>{'\\MathMLarg{x}{n}'}</code>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  );
+}
+
 /**
  * Full row editor (shown in the modal): every field of a concept is editable, the notation is authored
  * in TeX with a live MathML preview, and the row can be deleted. `onSave` receives the updated Concept;
@@ -128,36 +171,37 @@ export function NotationEditor({
         </label>
       </div>
 
-      {/* Speech + Notation sit together: speech $refs must be marked as args in the notation. */}
-      <div className="pair">
-        <label className="field">
-          <span>Speech (en)</span>
-          <textarea value={en} spellCheck={false} rows={2} onChange={(e) => setEn(e.target.value)} />
-        </label>
-        <div className="field">
-          <span className="notation-head">
-            Notation
-            <span className="mode-toggle" role="tablist" aria-label="Notation input mode">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={mode === 'tex'}
-                className={mode === 'tex' ? 'active' : ''}
-                onClick={() => setMode('tex')}
-              >
-                TeX
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={mode === 'mathml'}
-                className={mode === 'mathml' ? 'active' : ''}
-                onClick={() => setMode('mathml')}
-              >
-                Raw MathML
-              </button>
-            </span>
-            {mode === 'tex' && (
+      {/* Speech + Notation are full-width (contents can be long); speech $refs must be marked in the notation. */}
+      <label className="field">
+        <span>Speech (en)</span>
+        <textarea value={en} spellCheck={false} rows={2} onChange={(e) => setEn(e.target.value)} />
+      </label>
+
+      <div className="field">
+        <span className="notation-head">
+          Notation
+          <span className="mode-toggle" role="tablist" aria-label="Notation input mode">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'tex'}
+              className={mode === 'tex' ? 'active' : ''}
+              onClick={() => setMode('tex')}
+            >
+              TeX
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'mathml'}
+              className={mode === 'mathml' ? 'active' : ''}
+              onClick={() => setMode('mathml')}
+            >
+              Raw MathML
+            </button>
+          </span>
+          {mode === 'tex' && (
+            <span className="info-wrap">
               <button
                 type="button"
                 className="info-btn"
@@ -168,76 +212,40 @@ export function NotationEditor({
               >
                 ⓘ
               </button>
-            )}
-          </span>
-          {mode === 'tex' ? (
-            <textarea
-              data-testid="tex-input"
-              aria-label="Notation TeX"
-              value={tex}
-              spellCheck={false}
-              rows={2}
-              placeholder={'-\\arg{x}{n}'}
-              onChange={(e) => setTex(e.target.value)}
-            />
-          ) : (
-            <textarea
-              data-testid="mathml-input"
-              aria-label="Raw MathML"
-              value={rawMathml}
-              spellCheck={false}
-              rows={2}
-              onChange={(e) => setRawMathml(e.target.value)}
-            />
+              {showLegend && (
+                <div className="legend-pop">
+                  <MacroLegend />
+                </div>
+              )}
+            </span>
           )}
-        </div>
+        </span>
+        {mode === 'tex' ? (
+          <textarea
+            data-testid="tex-input"
+            aria-label="Notation TeX"
+            value={tex}
+            spellCheck={false}
+            rows={2}
+            placeholder={'-\\arg{x}{n}'}
+            onChange={(e) => setTex(e.target.value)}
+          />
+        ) : (
+          <textarea
+            data-testid="mathml-input"
+            aria-label="Raw MathML"
+            value={rawMathml}
+            spellCheck={false}
+            rows={15}
+            onChange={(e) => setRawMathml(e.target.value)}
+          />
+        )}
       </div>
 
       {missingRefs.length > 0 && (
         <p className="warn" role="status" data-testid="ref-warning">
           Speech references not marked in the notation: {missingRefs.join(', ')}
         </p>
-      )}
-
-      {showLegend && (
-      <table className="legend" data-testid="legend">
-        <thead>
-          <tr>
-            <th>Macro</th>
-            <th>Use</th>
-            <th>Example</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>
-              <code>{'\\arg{name}{…}'}</code>
-            </td>
-            <td>mark an argument</td>
-            <td>
-              <code>{'\\arg{argname}{value}'}</code>
-            </td>
-          </tr>
-          <tr>
-            <td>
-              <code>{'\\intent{expr}{…}'}</code>
-            </td>
-            <td>mark an intent expression</td>
-            <td>
-              <code>{'\\intent{biconditional($lhs,$rhs)}{\\arg{lhs}{A}\\iff\\arg{rhs}{B}}'}</code>
-            </td>
-          </tr>
-          <tr>
-            <td>
-              <code>\MathML…</code> / <code>\MML…</code>
-            </td>
-            <td>official aliases of the above</td>
-            <td>
-              <code>{'\\MathMLarg{x}{n}'}</code>
-            </td>
-          </tr>
-        </tbody>
-      </table>
       )}
 
       {notationError ? (
