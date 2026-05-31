@@ -13,6 +13,7 @@ import {
   type ChangeKind,
 } from './data/pendingChanges';
 import { ConceptTable } from './components/ConceptTable';
+import { Toast } from './components/ui';
 import {
   buildAuthorizeUrl,
   clearIdentity,
@@ -23,6 +24,7 @@ import {
   randomState,
   rememberState,
   saveIdentity,
+  secondsUntilExpiry,
   type Identity,
 } from './github/auth';
 import { repoConfigFromEnv, serviceConfigFromEnv } from './github/config';
@@ -65,6 +67,7 @@ export default function App() {
   const [deletedIds, setDeletedIds] = useState<Set<string>>(() => new Set());
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null); // last Save failure → red button + toast
   // The PR the user's branch terminates in; when it closes/merges we reset the session and reload.
   const [activePr, setActivePr] = useState<ActivePr | null>(() => loadPr(localStorage));
   const [reloadKey, setReloadKey] = useState(0); // bump to force a fresh dictionary load
@@ -213,6 +216,26 @@ export default function App() {
     setSubmitState(null);
   }, []);
 
+  // Drop an expired/invalid session (keeping the PR pointer + local edits): the UI returns to
+  // "signed out" so the editing affordances hide and a fresh sign-in mints a new token.
+  const expireSession = useCallback(() => {
+    clearIdentity(localStorage);
+    setIdentity(null);
+  }, []);
+
+  // Proactively sign out the instant the session JWT expires (the service signs a 12h TTL), even with
+  // no save attempt to surface a 401 first.
+  useEffect(() => {
+    if (!identity) return;
+    const secs = secondsUntilExpiry(identity);
+    if (secs == null) return; // no exp claim → nothing to schedule
+    const t = setTimeout(() => {
+      expireSession();
+      setSaveError('Your session expired — you’ve been signed out. Sign in again to continue (your changes are kept).');
+    }, Math.max(0, secs) * 1000);
+    return () => clearTimeout(t);
+  }, [identity, expireSession]);
+
   const [theme, setTheme] = useState<Theme>(currentTheme);
   const toggleTheme = useCallback(() => {
     setTheme((prev) => {
@@ -343,6 +366,7 @@ export default function App() {
     void (async () => {
       try {
         setSaving(true);
+        setSaveError(null); // clear any prior failure on retry
         setSubmitState('Submitting…');
         const { prNumber, prUrl } = await submitToService(service.serviceUrl, identity.jwt, {
           content,
@@ -362,12 +386,27 @@ export default function App() {
         setSubmitState(`PR #${prNumber}`);
         window.open(prUrl, '_blank', 'noopener');
       } catch (e) {
-        setSubmitState(`Submit failed: ${e instanceof Error ? e.message : String(e)}`);
+        const msg = e instanceof Error ? e.message : String(e);
+        // 401 = the service rejected our session token (expired/invalid) — sign out so the UI reflects
+        // it, then tell the user to sign in again. Other failures keep the session and just report.
+        if (/\b401\b|invalid session|token|unauthor/i.test(msg)) {
+          expireSession();
+          setSaveError('Your session expired — you’ve been signed out. Sign in again to save (your changes are kept).');
+        } else {
+          setSaveError(`Save failed: ${msg}`);
+        }
+        setSubmitState(null); // drop the "Submitting…" status; the toast carries the error
       } finally {
         setSaving(false);
       }
     })();
-  }, [source, baseline, deletedIds, gated, service, identity]);
+  }, [source, baseline, deletedIds, gated, service, identity, expireSession]);
+
+  const dismissSaveError = useCallback(() => setSaveError(null), []);
+
+  // Editing affordances (Add entry / Save / row ✗) are shown only when the user can actually edit:
+  // ungated in local-only mode (no service), otherwise only while signed in.
+  const canEdit = !service || !!identity;
 
   return (
     <div className="app">
@@ -438,32 +477,38 @@ export default function App() {
             onSelect={openEditor}
             onLoadMore={loadMore}
             editingId={editing ? conceptId(editing) : null}
-            onDelete={toggleRowDelete}
+            onDelete={canEdit ? toggleRowDelete : undefined}
             changeKind={changeKind}
             headerActions={
-              <>
-                <button type="button" className="add-entry" onClick={openCreate}>
-                  + Add entry
-                </button>
-                {service && (
-                  <button
-                    type="button"
-                    className="save-batch"
-                    data-testid="save-batch"
-                    disabled={!dirty || saving}
-                    onClick={saveBatch}
-                    title={dirty ? 'Submit all pending changes as one PR' : 'No pending changes'}
-                  >
-                    {saving ? (
-                      <>
-                        <span className="spinner" aria-hidden="true" /> Saving…
-                      </>
-                    ) : (
-                      'Save'
-                    )}
+              canEdit ? (
+                <>
+                  <button type="button" className="add-entry" onClick={openCreate}>
+                    + Add entry
                   </button>
-                )}
-              </>
+                  {service && (
+                    <button
+                      type="button"
+                      className={`save-batch${saveError ? ' error' : ''}`}
+                      data-testid="save-batch"
+                      disabled={!dirty || saving}
+                      onClick={saveBatch}
+                      title={
+                        saveError ?? (dirty ? 'Submit all pending changes as one PR' : 'No pending changes')
+                      }
+                    >
+                      {saving ? (
+                        <>
+                          <span className="spinner" aria-hidden="true" /> Saving…
+                        </>
+                      ) : saveError ? (
+                        'Save failed'
+                      ) : (
+                        'Save'
+                      )}
+                    </button>
+                  )}
+                </>
+              ) : null
             }
           />
         )}
@@ -491,6 +536,8 @@ export default function App() {
           </Suspense>
         )}
       </dialog>
+
+      {saveError && <Toast message={saveError} onClose={dismissSaveError} />}
     </div>
   );
 }

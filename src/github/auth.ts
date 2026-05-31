@@ -59,12 +59,42 @@ export function saveIdentity(storage: Storage, identity: Identity): void {
   storage.setItem(IDENTITY_KEY, JSON.stringify(identity));
 }
 
+/** Decode a JWT's payload (NOT verified — we only read the non-secret `exp` claim client-side). */
+function decodeJwtPayload(token: string): { exp?: number } | null {
+  const part = token.split('.')[1];
+  if (!part) return null;
+  try {
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = b64.length % 4 ? '='.repeat(4 - (b64.length % 4)) : '';
+    return JSON.parse(atob(b64 + pad)) as { exp?: number };
+  } catch {
+    return null;
+  }
+}
+
+/** Seconds until the identity's JWT expires (negative = already expired); null if it carries no `exp`. */
+export function secondsUntilExpiry(identity: Identity, nowMs: number = Date.now()): number | null {
+  const exp = decodeJwtPayload(identity.jwt)?.exp;
+  return typeof exp === 'number' ? exp - Math.floor(nowMs / 1000) : null;
+}
+
+/** Whether the identity's session JWT has expired (the service signs a 12h TTL). */
+export function isExpired(identity: Identity, nowMs: number = Date.now()): boolean {
+  const secs = secondsUntilExpiry(identity, nowMs);
+  return secs != null && secs <= 0;
+}
+
 export function loadIdentity(storage: Storage): Identity | null {
   const raw = storage.getItem(IDENTITY_KEY);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Identity;
-    return parsed && parsed.handle && parsed.jwt ? parsed : null;
+    if (!parsed || !parsed.handle || !parsed.jwt) return null;
+    if (isExpired(parsed)) {
+      storage.removeItem(IDENTITY_KEY); // a stale session shouldn't read as signed-in
+      return null;
+    }
+    return parsed;
   } catch {
     return null;
   }
