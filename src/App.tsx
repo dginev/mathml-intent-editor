@@ -5,24 +5,11 @@ import { conceptMatches } from './data/conceptMatch';
 import { classifyChange, type ChangeKind } from './data/pendingChanges';
 import { buildSubmission } from './github/submission';
 import { useDictionary } from './hooks/useDictionary';
+import { useIdentity } from './hooks/useIdentity';
 import { useTheme } from './hooks/useTheme';
 import { useGlobalFindShortcut } from './hooks/useGlobalFindShortcut';
 import { ConceptTable } from './components/ConceptTable';
 import { Toast } from './components/ui';
-import {
-  buildAuthorizeUrl,
-  clearIdentity,
-  consumeState,
-  exchangeCodeForIdentity,
-  loadIdentity,
-  parseCallback,
-  randomState,
-  rememberState,
-  renewIdentity,
-  saveIdentity,
-  secondsUntilExpiry,
-  type Identity,
-} from './github/auth';
 import { repoConfigFromEnv, serviceConfigFromEnv } from './github/config';
 import { resetSession, submitToService } from './github/submitClient';
 import { clearPr, fetchPullState, loadPr, savePr, type ActivePr } from './github/prSession';
@@ -34,9 +21,8 @@ const NotationEditor = lazy(() =>
   import('./components/NotationEditor').then((m) => ({ default: m.NotationEditor })),
 );
 
-/** Renew the session on a visit once it has dipped below this many seconds (6 of its 7 days) — keeps an
- *  active user signed in indefinitely without renewing a token that was just minted. */
-const RENEW_BELOW_SECONDS = 6 * 24 * 60 * 60;
+const SESSION_EXPIRED =
+  'Your session expired — you’ve been signed out. Sign in again to continue (your changes are kept).';
 
 export default function App() {
   const [filter, setFilter] = useState('');
@@ -81,34 +67,23 @@ export default function App() {
   const ready = dict.status === 'ready';
   const total = concepts.length;
 
-  // Identity: a verified @handle + JWT from the service's /auth. Required to edit when a service is
-  // configured; without a service the app is local-only (no gate, no PRs).
-  const [identity, setIdentity] = useState<Identity | null>(() => loadIdentity(localStorage));
+  // Identity + session lifecycle (OAuth completion, sliding-TTL token, proactive sign-out, renew). The
+  // status-line message + the expiry toast are page concerns, delivered via callbacks.
   const [submitState, setSubmitState] = useState<string | null>(null);
-  // True from the moment we return with an OAuth code until /auth resolves — drives the "Signing in…"
-  // spinner. Initialized synchronously so the spinner shows immediately on the redirect back.
-  const [authPending, setAuthPending] = useState(
-    () => !!(serviceConfigFromEnv() && parseCallback(window.location.search)),
-  );
+  const { identity, authPending, signIn, expireSession } = useIdentity({
+    service,
+    onSignInError: setSubmitState,
+    onSessionExpired: () => setSaveError(SESSION_EXPIRED),
+  });
 
-  // Complete the OAuth redirect (?code=…&state=…): verify state, exchange via /auth, store identity.
-  useEffect(() => {
-    if (!service) return;
-    const cb = parseCallback(window.location.search);
-    if (!cb) return;
-    const cleanUrl = window.location.origin + window.location.pathname;
-    const valid = cb.state === consumeState(localStorage);
-    window.history.replaceState(null, '', cleanUrl);
-    void (valid
-      ? exchangeCodeForIdentity(service.serviceUrl, cb.code).then((id) => {
-          saveIdentity(localStorage, id);
-          setIdentity(id);
-        })
-      : Promise.reject(new Error('state mismatch'))
-    )
-      .catch((e) => setSubmitState(`Sign-in failed: ${e instanceof Error ? e.message : String(e)}`))
-      .finally(() => setAuthPending(false));
-  }, [service]);
+  // Sign out: drop the identity AND the PR pointer, then reload from base (no branch-reconciled view).
+  const signOut = useCallback(() => {
+    expireSession();
+    clearPr(localStorage);
+    setActivePr(null);
+    setSubmitState(null);
+    setReloadKey((k) => k + 1);
+  }, [expireSession]);
 
   // When the user's working PR is closed or merged, end the session: ask the service to delete the
   // (now stale) intent/<handle> branch, drop local edits, and reload clean from the base branch. Checked
@@ -141,67 +116,6 @@ export default function App() {
 
   // Reveal the next page (the reducer caps it at the row count; the first page shows on load).
   const loadMore = useCallback(() => dispatch({ type: 'loadMore' }), [dispatch]);
-
-  const signIn = useCallback(() => {
-    if (!service) return;
-    const state = randomState();
-    rememberState(localStorage, state);
-    const redirectUri = window.location.origin + window.location.pathname;
-    window.location.assign(buildAuthorizeUrl(service.clientId, redirectUri, state));
-  }, [service]);
-
-  const signOut = useCallback(() => {
-    clearIdentity(localStorage);
-    clearPr(localStorage);
-    setActivePr(null);
-    setIdentity(null);
-    setSubmitState(null);
-    setReloadKey((k) => k + 1); // reload from base — drop the branch-reconciled view
-  }, []);
-
-  // Drop an expired/invalid session (keeping the PR pointer + local edits): the UI returns to
-  // "signed out" so the editing affordances hide and a fresh sign-in mints a new token.
-  const expireSession = useCallback(() => {
-    clearIdentity(localStorage);
-    setIdentity(null);
-  }, []);
-
-  // Proactively sign out the instant the session JWT expires (the service signs a sliding TTL), even
-  // with no save attempt to surface a 401 first.
-  useEffect(() => {
-    if (!identity) return;
-    const secs = secondsUntilExpiry(identity);
-    if (secs == null) return; // no exp claim → nothing to schedule
-    const t = setTimeout(() => {
-      expireSession();
-      setSaveError('Your session expired — you’ve been signed out. Sign in again to continue (your changes are kept).');
-    }, Math.max(0, secs) * 1000);
-    return () => clearTimeout(t);
-  }, [identity, expireSession]);
-
-  // Sliding session: on a visit, if a still-valid token has aged past its first day, swap it for a
-  // fresh-TTL one so active users never have to re-auth. Loop-safe (the renewed token is fresh →
-  // above the threshold) and graceful if /renew isn't deployed yet (a non-401 failure keeps the token).
-  useEffect(() => {
-    if (!service || !identity) return;
-    const secs = secondsUntilExpiry(identity);
-    if (secs == null || secs >= RENEW_BELOW_SECONDS) return; // fresh enough — no renew
-    let live = true;
-    void renewIdentity(service.serviceUrl, identity.jwt)
-      .then((id) => {
-        if (!live) return;
-        saveIdentity(localStorage, id);
-        setIdentity(id);
-      })
-      .catch((e) => {
-        // Only a rejected session means sign out; a missing endpoint / offline keeps the current token.
-        const msg = e instanceof Error ? e.message : String(e);
-        if (live && /\b401\b|invalid session|unauthor/i.test(msg)) expireSession();
-      });
-    return () => {
-      live = false;
-    };
-  }, [service, identity, expireSession]);
 
   const [theme, toggleTheme] = useTheme();
 
