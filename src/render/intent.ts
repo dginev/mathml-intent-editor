@@ -12,6 +12,13 @@ import type { TemmlEngine } from './temmlEngine';
  */
 export type IntentResult = { ok: true; mathml: string; arity: number } | { ok: false; error: string };
 
+/**
+ * A `$ref` in a speech template names an argument. Argument names are NCNames: besides letters and
+ * digits they may contain `_`, `-`, and `.`, starting with a letter/`_` (or a digit, for positional
+ * `$1`). A trailing `.`/`-` is left out — it's almost always sentence punctuation, not part of the name.
+ */
+const SPEECH_REF = /\$([A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?)/g;
+
 function stripClasses(el: Element): void {
   el.removeAttribute('class');
   for (const c of Array.from(el.querySelectorAll('*'))) c.removeAttribute('class');
@@ -27,16 +34,17 @@ function rootOf(doc: Document, math: Element): Element {
 }
 
 /**
- * Validate that every argument referenced in a speech `en` template is actually marked in the notation.
- * Speech uses `$N` (positional) or `$name`; the notation marks args with `arg="aN"` (the W3C file's
- * convention) or `arg="name"`. A `$1` is satisfied by `arg="a1"` or `arg="1"`; `$name` by `arg="name"`.
+ * Validate that every argument referenced in a speech template is actually marked in the notation.
+ * Speech uses `$N` (positional) or `$name` (an NCName, so it may contain `_`, `-`, `.`); the notation
+ * marks args with `arg="aN"` (the W3C file's convention) or `arg="name"`. A `$1` is satisfied by
+ * `arg="a1"` or `arg="1"`; `$name` by `arg="name"`.
  * Returns the unsatisfied refs (as `$ref` strings) — empty means the speech and notation agree.
  */
 export function missingSpeechRefs(speech: string, mathml: string): string[] {
   const args = new Set<string>();
   for (const m of mathml.matchAll(/\barg=["']([^"']+)["']/g)) args.add(m[1]);
   const missing: string[] = [];
-  for (const m of speech.matchAll(/\$([A-Za-z0-9_]+)/g)) {
+  for (const m of speech.matchAll(SPEECH_REF)) {
     const ref = m[1];
     const numeric = /^\d+$/.test(ref);
     const ok = args.has(ref) || (numeric && (args.has(`a${ref}`) || args.has(`_${ref}`)));
@@ -52,7 +60,7 @@ export function missingSpeechRefs(speech: string, mathml: string): string[] {
  */
 export function unusedArgRefs(speech: string, mathml: string): string[] {
   const refs = new Set<string>();
-  for (const m of speech.matchAll(/\$([A-Za-z0-9_]+)/g)) refs.add(m[1]);
+  for (const m of speech.matchAll(SPEECH_REF)) refs.add(m[1]);
   const unused: string[] = [];
   for (const m of mathml.matchAll(/\barg=["']([^"']+)["']/g)) {
     const arg = m[1];
