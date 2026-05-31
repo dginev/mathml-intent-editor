@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { missingSpeechRefs, texToIntent } from '../render/intent';
 import { loadTemml, type TemmlEngine } from '../render/temmlEngine';
 import { MathML } from './MathML';
@@ -10,6 +10,9 @@ const lines = (s: string): string[] =>
     .split('\n')
     .map((l) => l.trim())
     .filter(Boolean);
+
+/** One editable link: a stable id (edit state survives add/remove), its URL, and whether it's open for editing. */
+type LinkRow = { id: number; value: string; editing: boolean };
 
 function MacroLegend() {
   return (
@@ -42,7 +45,8 @@ function MacroLegend() {
         </tr>
         <tr>
           <td>
-            <code>{'\\MathMLarg'}</code>, <code>{'\\MathMLintent'}</code>
+            <code>{'\\MathMLarg'}</code>,<br />
+            <code>{'\\MathMLintent'}</code>
           </td>
           <td>official aliases of the above</td>
           <td>
@@ -76,8 +80,20 @@ export function NotationEditor({
   const [arity, setArity] = useState(concept.arity != null ? String(concept.arity) : '');
   const [property, setProperty] = useState(concept.property ?? '');
   const [tex, setTex] = useState(concept.tex ?? '');
-  const [linksText, setLinksText] = useState(concept.links.join('\n'));
+  // Initial ids are the indices; the counter starts past them so new rows never collide.
+  const linkId = useRef(concept.links.length);
+  const [linkRows, setLinkRows] = useState<LinkRow[]>(() =>
+    concept.links.map((value, i) => ({ id: i, value, editing: false })),
+  );
   const [aliasText, setAliasText] = useState(concept.alias.join('\n'));
+
+  const setLinkValue = (id: number, value: string) =>
+    setLinkRows((rows) => rows.map((r) => (r.id === id ? { ...r, value } : r)));
+  const setLinkEditing = (id: number, editing: boolean) =>
+    setLinkRows((rows) => rows.map((r) => (r.id === id ? { ...r, editing } : r)));
+  const addLink = () =>
+    setLinkRows((rows) => [...rows, { id: linkId.current++, value: '', editing: true }]);
+  const removeLink = (id: number) => setLinkRows((rows) => rows.filter((r) => r.id !== id));
   const [showLegend, setShowLegend] = useState(false);
   const [showProperties, setShowProperties] = useState(false);
   // Notation is authored EITHER as TeX (rendered to MathML) OR as raw MathML, seeded with the current.
@@ -140,7 +156,7 @@ export function NotationEditor({
       arity: arity.trim() === '' || Number.isNaN(n) ? undefined : n,
       property: property.trim() || undefined,
       mathml,
-      links: lines(linksText),
+      links: linkRows.map((r) => r.value.trim()).filter(Boolean),
       alias: lines(aliasText),
       // TeX kept only when it authored the notation; raw-MathML authoring clears it.
       tex: mode === 'tex' ? tex.trim() || undefined : undefined,
@@ -301,15 +317,71 @@ export function NotationEditor({
       )}
 
       <div className="pair">
-        <label className="field">
-          <span>Links — one URL per line</span>
-          <textarea
-            value={linksText}
-            spellCheck={false}
-            rows={2}
-            onChange={(e) => setLinksText(e.target.value)}
-          />
-        </label>
+        <div className="field">
+          <span>Links</span>
+          <div className="link-list" data-testid="link-list">
+            {linkRows.map((row) =>
+              row.editing || row.value.trim() === '' ? (
+                <div className="link-row" key={row.id}>
+                  <input
+                    className="link-input"
+                    type="url"
+                    aria-label="Link URL"
+                    placeholder="https://…"
+                    value={row.value}
+                    spellCheck={false}
+                    autoFocus
+                    onChange={(e) => setLinkValue(row.id, e.target.value)}
+                    onBlur={() => setLinkEditing(row.id, false)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        setLinkEditing(row.id, false);
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label="Remove link"
+                    title="Remove"
+                    onClick={() => removeLink(row.id)}
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : (
+                <div className="link-row" key={row.id}>
+                  {/* not active → clickable */}
+                  <a className="link-display" href={row.value} target="_blank" rel="noreferrer">
+                    {row.value}
+                  </a>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label="Edit link"
+                    title="Edit"
+                    onClick={() => setLinkEditing(row.id, true)}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label="Remove link"
+                    title="Remove"
+                    onClick={() => removeLink(row.id)}
+                  >
+                    ×
+                  </button>
+                </div>
+              ),
+            )}
+            <button type="button" className="add-link" onClick={addLink}>
+              + Add link
+            </button>
+          </div>
+        </div>
         <label className="field">
           <span>Aliases — one per line</span>
           <textarea

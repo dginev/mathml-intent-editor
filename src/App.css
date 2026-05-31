@@ -282,8 +282,8 @@
 }
 /* The macro legend (Notation TeX) needs room for the long \intent example. */
 .legend-pop:has(.legend) {
-  min-width: min(36rem, 98vw);
-  max-width: min(36rem, 98vw);
+  min-width: min(46rem, 98vw);
+  max-width: min(46rem, 98vw);
 }
 .legend-note {
   margin: 0;
@@ -316,6 +316,70 @@
 .pair .field textarea {
   width: 100%;
   box-sizing: border-box;
+}
+
+/* Links: one input per URL, clickable when not being edited. */
+.link-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  align-items: flex-start;
+}
+.link-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+}
+.link-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+}
+.link-display {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--link);
+  font-size: 0.85rem;
+}
+.link-row .icon-btn {
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0.1rem 0.25rem;
+  border-radius: 4px;
+}
+.link-row .icon-btn:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+.add-link {
+  align-self: flex-start;
+  margin-top: 0.1rem;
+  border: 1px dashed var(--border);
+  background: none;
+  color: var(--link);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+}
+.add-link:hover {
+  border-color: var(--link);
 }
 
 /* Field heading: label + (optional) controls + (i) help. */

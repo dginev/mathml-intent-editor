@@ -104,6 +104,43 @@ describe('NotationEditor', () => {
     expect(screen.getByTestId('legend')).toBeInTheDocument();
   });
 
+  it('shows existing links as clickable anchors and re-aggregates added links on save', () => {
+    const onSave = vi.fn();
+    render(<NotationEditor concept={base} onSave={onSave} />);
+    const link = screen.getByRole('link', { name: 'https://example.org/a' });
+    expect(link).toHaveAttribute('href', 'https://example.org/a');
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Add link' }));
+    const inputs = screen.getAllByLabelText('Link URL');
+    fireEvent.change(inputs[inputs.length - 1], { target: { value: 'https://example.org/b' } });
+    fireEvent.click(screen.getByTestId('save'));
+
+    const c = onSave.mock.calls[0][0] as Concept;
+    expect(c.links).toEqual(['https://example.org/a', 'https://example.org/b']);
+  });
+
+  it('edits an existing link via its pencil icon', () => {
+    const onSave = vi.fn();
+    render(<NotationEditor concept={base} onSave={onSave} />);
+    expect(screen.queryByLabelText('Link URL')).toBeNull(); // shown as a link, not an input
+    fireEvent.click(screen.getByRole('button', { name: 'Edit link' }));
+    fireEvent.change(screen.getByLabelText('Link URL'), { target: { value: 'https://changed.example' } });
+    fireEvent.click(screen.getByTestId('save'));
+
+    const c = onSave.mock.calls[0][0] as Concept;
+    expect(c.links).toEqual(['https://changed.example']);
+  });
+
+  it('removes a link and drops it from the saved concept', () => {
+    const onSave = vi.fn();
+    render(<NotationEditor concept={base} onSave={onSave} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove link' }));
+    fireEvent.click(screen.getByTestId('save'));
+
+    const c = onSave.mock.calls[0][0] as Concept;
+    expect(c.links).toEqual([]);
+  });
+
   it('explains that properties are space-separated via the info button', () => {
     render(<NotationEditor concept={base} onSave={vi.fn()} />);
     expect(screen.queryByTestId('properties-help')).toBeNull();
