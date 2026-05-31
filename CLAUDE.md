@@ -167,7 +167,9 @@ runs without a backend. So **don't remove the seed path** — the perf e2e depen
   path anymore (only its own node test uses it); kept for reference.
 - `src/components/MathML.tsx` — renders a MathML string natively; wraps bare fragments in `<math>`
   (both seed notations and `texToIntent` output are fragment-only). One render path for stored
-  notations and freshly converted TeX.
+  notations and freshly converted TeX. Markup is **sanitized** (`render/sanitizeMathml.ts`, DOMPurify
+  MathML profile + `intent`/`arg`) before `innerHTML`, since raw-MathML notations are user-authored and
+  shared via `open.yml` — otherwise stored XSS.
 - `src/components/NotationEditor.tsx` — inline TeX editor: loads Temml (async, via `temmlEngine`),
   live-previews the annotated MathML, Save emits the dictionary fragment. Lazy-loaded from `App.tsx`.
 - `src/App.tsx` — shell: loads the seed, filter input, table; row click opens the editor; Save persists
