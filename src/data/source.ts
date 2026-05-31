@@ -22,6 +22,8 @@ export type ConceptSource = {
   remove(id: string): void;
   /** Full backing-file content (W3C `open.yml` shape) for committing to GitHub. */
   serialize(): string;
+  /** All concept names currently in the dataset — used to flag alias references to known concepts. */
+  slugSet(): Set<string>;
 };
 
 export function createSource(concepts: Concept[]): ConceptSource {
@@ -42,6 +44,7 @@ export function createSource(concepts: Concept[]): ConceptSource {
       if (i >= 0) all.splice(i, 1);
     },
     serialize: () => serializeConcepts(all),
+    slugSet: () => new Set(all.map((c) => c.slug)),
   };
 }
 

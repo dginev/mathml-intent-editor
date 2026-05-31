@@ -310,6 +310,7 @@ export default function App() {
               onSave={handleSave}
               onDelete={handleDelete}
               onCancel={() => setEditing(null)}
+              knownSlugs={source?.slugSet()}
             />
           </Suspense>
         )}

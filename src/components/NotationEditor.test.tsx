@@ -141,6 +141,35 @@ describe('NotationEditor', () => {
     expect(c.links).toEqual([]);
   });
 
+  it('renders aliases as chips: highlighted for a known concept, muted otherwise', () => {
+    const c: Concept = { ...base, alias: ['known_one', 'unknown_two'] };
+    render(<NotationEditor concept={c} onSave={vi.fn()} knownSlugs={new Set(['known_one'])} />);
+    const chips = screen.getAllByTestId('alias-chip');
+    expect(chips).toHaveLength(2);
+    expect(chips.find((el) => el.textContent?.includes('known_one'))).toHaveClass('known');
+    expect(chips.find((el) => el.textContent?.includes('unknown_two'))).toHaveClass('unknown');
+  });
+
+  it('adds an alias and re-aggregates the list on save', () => {
+    const onSave = vi.fn();
+    render(<NotationEditor concept={{ ...base, alias: ['first'] }} onSave={onSave} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add alias' }));
+    const inputs = screen.getAllByLabelText('Alias');
+    fireEvent.change(inputs[inputs.length - 1], { target: { value: 'second' } });
+    fireEvent.click(screen.getByTestId('save'));
+    expect((onSave.mock.calls[0][0] as Concept).alias).toEqual(['first', 'second']);
+  });
+
+  it('edits an existing alias via its pencil icon', () => {
+    const onSave = vi.fn();
+    render(<NotationEditor concept={{ ...base, alias: ['old_name'] }} onSave={onSave} />);
+    expect(screen.queryByLabelText('Alias')).toBeNull(); // shown as a chip, not an input
+    fireEvent.click(screen.getByRole('button', { name: 'Edit alias' }));
+    fireEvent.change(screen.getByLabelText('Alias'), { target: { value: 'new_name' } });
+    fireEvent.click(screen.getByTestId('save'));
+    expect((onSave.mock.calls[0][0] as Concept).alias).toEqual(['new_name']);
+  });
+
   it('explains that properties are space-separated via the info button', () => {
     render(<NotationEditor concept={base} onSave={vi.fn()} />);
     expect(screen.queryByTestId('properties-help')).toBeNull();
