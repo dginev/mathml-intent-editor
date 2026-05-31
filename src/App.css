@@ -146,8 +146,27 @@
   background: var(--hover);
 }
 
-.row-clickable {
-  cursor: pointer;
+/* Link chips: the link's domain as a clickable pill (opens in a new tab). */
+.link-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.link-chip {
+  display: inline-block;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--link);
+  font-size: 0.72rem;
+  text-decoration: none;
+}
+.link-chip:hover {
+  border-color: var(--link);
+  background: var(--hover);
 }
 
 /* The row currently open in the editor — highlighted (and scrolled to centre) behind the modal. */
@@ -281,7 +300,13 @@
   }
 }
 
-/* Per-row delete/restore (✗ / ↺). */
+/* Per-row icon actions: edit (✎) and delete/restore (✗ / ↺), spaced apart. */
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+.row-edit,
 .row-x {
   border: 0;
   background: none;
@@ -289,8 +314,12 @@
   cursor: pointer;
   font-size: 0.9rem;
   line-height: 1;
-  padding: 0.2rem 0.35rem;
+  padding: 0.2rem 0.3rem;
   border-radius: 4px;
+}
+.row-edit:hover {
+  color: var(--accent);
+  background: var(--hover);
 }
 .row-x:hover {
   color: var(--text);

@@ -14,7 +14,7 @@ test('edits a concept notation from TeX and reflects it in the table', async ({ 
 
   const row = page.locator('[data-slug="additive-inverse"]').first();
   await expect(row).toBeVisible();
-  await row.click();
+  await row.locator('.row-edit').click(); // editing is icon-based; the row itself isn't clickable
 
   // Editor opens; author TeX and confirm the live preview is annotated.
   const tex = page.getByTestId('tex-input');

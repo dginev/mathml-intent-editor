@@ -11,12 +11,14 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import type { Concept } from '../types';
 import { conceptId } from '../data/conceptId';
 import type { ChangeKind } from '../data/pendingChanges';
+import { linkDomain } from './linkDomain';
 import { MathML } from './MathML';
 
 const columnHelper = createColumnHelper<Concept>();
 
 /** Per-row callbacks the display columns reach through TanStack's table `meta`. */
 type TableMeta = {
+  onEdit?: (c: Concept) => void;
   onDelete?: (c: Concept) => void;
   changeKind?: (c: Concept) => ChangeKind | null;
 };
@@ -43,28 +45,62 @@ const columns = [
     size: 320,
     cell: (info) => <MathML markup={info.getValue()} className="mathml" />,
   }),
-  columnHelper.accessor((c) => c.links.length, { id: 'links', header: 'Links', size: 70 }),
+  columnHelper.accessor((c) => c.links, {
+    id: 'links',
+    header: 'Links',
+    size: 220,
+    cell: (info) => (
+      <div className="link-chips">
+        {info.getValue().map((url, i) => (
+          <a
+            key={i}
+            className="link-chip"
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            title={url}
+          >
+            {linkDomain(url)}
+          </a>
+        ))}
+      </div>
+    ),
+  }),
   columnHelper.display({
     id: 'actions',
     header: '',
-    size: 44,
+    size: 84,
     cell: ({ row, table }) => {
       const meta = table.options.meta as TableMeta | undefined;
-      if (!meta?.onDelete) return null; // hidden unless editing is allowed (signed in)
-      const deleted = meta.changeKind?.(row.original) === 'deleted';
+      const onEdit = meta?.onEdit;
+      const onDelete = meta?.onDelete;
+      if (!onEdit && !onDelete) return null; // hidden unless editing is allowed (signed in)
+      const deleted = meta?.changeKind?.(row.original) === 'deleted';
       return (
-        <button
-          type="button"
-          className="row-x"
-          aria-label={`${deleted ? 'Restore' : 'Delete'} ${row.original.slug}`}
-          title={deleted ? 'Restore row' : 'Delete row'}
-          onClick={(e) => {
-            e.stopPropagation(); // don't open the editor
-            meta?.onDelete?.(row.original);
-          }}
-        >
-          {deleted ? '↺' : '✗'}
-        </button>
+        <span className="row-actions">
+          {onEdit && (
+            <button
+              type="button"
+              className="row-edit"
+              aria-label={`Edit ${row.original.slug}`}
+              title="Edit row"
+              onClick={() => onEdit(row.original)}
+            >
+              ✎
+            </button>
+          )}
+          {onDelete && (
+            <button
+              type="button"
+              className="row-x"
+              aria-label={`${deleted ? 'Restore' : 'Delete'} ${row.original.slug}`}
+              title={deleted ? 'Restore row' : 'Delete row'}
+              onClick={() => onDelete(row.original)}
+            >
+              {deleted ? '↺' : '✗'}
+            </button>
+          )}
+        </span>
       );
     },
   }),
@@ -79,7 +115,7 @@ export function ConceptTable({
   data,
   total,
   filter,
-  onSelect,
+  onEdit,
   onLoadMore,
   editingId,
   onDelete,
@@ -91,7 +127,8 @@ export function ConceptTable({
   /** Total rows available; `data.length < total` means more can be paged in. */
   total: number;
   filter: string;
-  onSelect?: (concept: Concept) => void;
+  /** Per-row edit (the ✎ button); rows themselves are not clickable. */
+  onEdit?: (concept: Concept) => void;
   onLoadMore?: () => void;
   /** conceptId of the row being edited — highlighted and scrolled to centre while the modal is open. */
   editingId?: string | null;
@@ -109,7 +146,7 @@ export function ConceptTable({
     globalFilterFn: conceptFilter,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    meta: { onDelete, changeKind },
+    meta: { onEdit, onDelete, changeKind },
   });
 
   const rows = table.getRowModel().rows;
@@ -167,14 +204,13 @@ export function ConceptTable({
             const kind = changeKind?.(row.original) ?? null;
             return (
               <div
-                className={`tr row-clickable${conceptId(row.original) === editingId ? ' row-editing' : ''}${
+                className={`tr${conceptId(row.original) === editingId ? ' row-editing' : ''}${
                   kind ? ` row-${kind}` : ''
                 }`}
                 key={row.id}
                 data-row-index={vi.index}
                 data-slug={row.original.slug}
                 style={{ transform: `translateY(${vi.start}px)`, height: ROW_HEIGHT }}
-                onClick={() => onSelect?.(row.original)}
               >
                 {row.getVisibleCells().map((cell) => (
                   <div className="td" key={cell.id} style={{ width: cell.column.getSize() }}>
