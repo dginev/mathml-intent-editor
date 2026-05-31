@@ -1,0 +1,18 @@
+{
+  "name": "mathml-intent-service",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Auth + bot-PR microservice for the MathML Intent Open Editor (deployed on latexml.rs).",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.1",
+    "@octokit/auth-app": "^7.1.3",
+    "@octokit/core": "^7.0.2",
+    "fastify": "^5.2.1",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

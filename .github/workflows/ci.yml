@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main, react-intent-editor]
+  pull_request:
+
+jobs:
+  check:
+    name: build · lint · unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run lint
+      - run: npx vitest run
+      - name: Service unit tests
+        run: node --test service/src/handlers.test.js
+
+  e2e:
+    name: playwright e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The Playwright config pins channel:'chrome'; install Google Chrome + its OS deps.
+      - run: npx playwright install --with-deps chrome
+      - run: npx playwright test

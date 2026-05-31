@@ -1,0 +1,137 @@
+/*
+ * Design tokens. Semantic color variables in two themes (light default / dark), chosen for WCAG-AA
+ * contrast. Theme is selected by `data-theme` on <html> (set pre-render by an inline script in
+ * index.html, toggled at runtime in App). When no explicit theme is set we follow the OS preference.
+ * Every color in the app references a token — no raw hex in component CSS.
+ */
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #f5f6f8;
+  --surface-2: #e9ebef;
+  --text: #16191d; /* ~16:1 on --bg */
+  --text-muted: #545a62; /* ~7:1 on --bg */
+  --border: #ccd1d8;
+  --accent: #6d28d9;
+  --accent-text: #ffffff; /* ~5.9:1 on --accent */
+  --accent-hover: #5b21b6;
+  --hover: rgba(109, 40, 217, 0.08);
+  --link: #1d4ed8; /* ~7:1 on --bg */
+  --focus: #6d28d9;
+  --danger-bg: #fdecea;
+  --danger-text: #a31c12; /* ~6:1 on --bg */
+  --warning-bg: #fff4e5;
+  --warning-text: #7a4d00; /* ~7:1 on --warning-bg */
+  --code-bg: #e9ebef;
+  --code-text: #16191d;
+  --annot-bg: rgba(109, 40, 217, 0.12);
+  --annot-text: #5b21b6; /* dark purple on the light tint */
+  /* Pending-change row tints (GitHub-style diff colours; changed = the Save accent). */
+  --diff-add-bg: #e6ffec;
+  --diff-del-bg: #ffebe9;
+  --diff-changed-bg: rgba(109, 40, 217, 0.1);
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #14161b;
+  --surface: #1d2026;
+  --surface-2: #2a2e37;
+  --text: #eaecef; /* ~15:1 on --bg */
+  --text-muted: #a6adb6; /* ~8:1 on --bg */
+  --border: #353b45;
+  --accent: #8b5cf6;
+  --accent-text: #14161b; /* ~7:1 on --accent */
+  --accent-hover: #a78bfa;
+  --hover: rgba(139, 92, 246, 0.16);
+  --link: #93c5fd; /* ~10:1 on --bg */
+  --focus: #a78bfa;
+  --danger-bg: #3a201e;
+  --danger-text: #ff9d92;
+  --warning-bg: #3a2e1a;
+  --warning-text: #f0d8b0;
+  --code-bg: #2a2e37;
+  --code-text: #eaecef;
+  --annot-bg: rgba(139, 92, 246, 0.22);
+  --annot-text: #d6c8ff; /* light lavender — high contrast on the dark tint */
+  --diff-add-bg: rgba(46, 160, 67, 0.18);
+  --diff-del-bg: rgba(248, 81, 73, 0.18);
+  --diff-changed-bg: rgba(139, 92, 246, 0.2);
+}
+
+/* Follow the OS preference only when no explicit theme has been chosen. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --bg: #14161b;
+    --surface: #1d2026;
+    --surface-2: #2a2e37;
+    --text: #eaecef;
+    --text-muted: #a6adb6;
+    --border: #353b45;
+    --accent: #8b5cf6;
+    --accent-text: #14161b;
+    --accent-hover: #a78bfa;
+    --hover: rgba(139, 92, 246, 0.16);
+    --link: #93c5fd;
+    --focus: #a78bfa;
+    --danger-bg: #3a201e;
+    --danger-text: #ff9d92;
+    --warning-bg: #3a2e1a;
+    --warning-text: #f0d8b0;
+    --code-bg: #2a2e37;
+    --code-text: #eaecef;
+    --annot-bg: rgba(139, 92, 246, 0.22);
+    --annot-text: #d6c8ff;
+    --diff-add-bg: rgba(46, 160, 67, 0.18);
+    --diff-del-bg: rgba(248, 81, 73, 0.18);
+    --diff-changed-bg: rgba(139, 92, 246, 0.2);
+  }
+}
+
+:root {
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, Consolas, monospace;
+
+  font: 16px/145% var(--sans);
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  width: 100%;
+  min-height: 100svh;
+}
+
+h1 {
+  font-family: var(--sans);
+  font-weight: 600;
+  color: var(--text);
+}
+
+a {
+  color: var(--link);
+}
+
+code {
+  font-family: var(--mono);
+  border-radius: 4px;
+  color: var(--code-text);
+  background: var(--code-bg);
+  padding: 1px 5px;
+}
+
+/* Visible keyboard focus everywhere (accessibility). */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
