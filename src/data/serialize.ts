@@ -4,15 +4,16 @@ import type { Concept } from '../types';
 /** The canonical single group title in the W3C open.yml. */
 const GROUP_TITLE = 'Open Concepts';
 
-/** Overwrite a scalar field only when the model has a value — never delete what `raw` already had. */
-function overlay(e: Record<string, unknown>, key: string, value: unknown): void {
-  if (value !== undefined && value !== null) e[key] = value;
-}
-
-/** Arrays are fully owned by the model: set when non-empty, otherwise drop the key. */
-function overlayArray(e: Record<string, unknown>, key: string, arr: string[]): void {
-  if (arr.length) e[key] = arr;
-  else delete e[key];
+/**
+ * Modeled fields are authoritative: set when present, deleted when empty/absent (so a cleared field is
+ * removed). Fields we don't model (`notation*`, `comments`) are left untouched via the `raw` spread.
+ */
+function setOrDelete(e: Record<string, unknown>, key: string, value: unknown): void {
+  if (value === undefined || value === null || (Array.isArray(value) && value.length === 0)) {
+    delete e[key];
+  } else {
+    e[key] = value;
+  }
 }
 
 /**
@@ -37,13 +38,13 @@ export function serializeConcepts(concepts: Concept[]): string {
   const intents = [...concepts].sort(byConcept).map((c) => {
     const e: Record<string, unknown> = { ...(c.raw ?? {}) };
     e.concept = c.slug;
-    overlay(e, 'arity', c.arity);
-    overlay(e, 'en', c.en);
-    overlay(e, 'property', c.property);
-    overlay(e, 'area', c.area);
-    overlayArray(e, 'mathml', c.mathml);
-    overlayArray(e, 'urls', c.links);
-    overlayArray(e, 'alias', c.alias);
+    setOrDelete(e, 'arity', c.arity);
+    setOrDelete(e, 'en', c.en);
+    setOrDelete(e, 'property', c.property);
+    setOrDelete(e, 'area', c.area);
+    setOrDelete(e, 'mathml', c.mathml);
+    setOrDelete(e, 'urls', c.links);
+    setOrDelete(e, 'alias', c.alias);
     delete e.tex; // never persist the editor-only TeX to the shared file
     return e;
   });

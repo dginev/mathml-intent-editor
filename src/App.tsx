@@ -4,7 +4,6 @@ import { loadDictionary } from './data/loadDictionary';
 import { loadEdits, recordEdit } from './data/editCache';
 import { conceptId } from './data/conceptId';
 import { ConceptTable } from './components/ConceptTable';
-import type { SavedNotation } from './components/NotationEditor';
 import {
   buildAuthorizeUrl,
   clearIdentity,
@@ -46,6 +45,7 @@ export default function App() {
   const [filter, setFilter] = useState('');
   const [editing, setEditing] = useState<Concept | null>(null);
   const [conflicts, setConflicts] = useState<string[]>([]);
+  const [total, setTotal] = useState(0); // row count (set on load, decremented on delete)
   const loadingRef = useRef(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
@@ -98,6 +98,7 @@ export default function App() {
       if (!live) return;
       setRows([]);
       setSource(s);
+      setTotal(s.total);
       setConflicts(c);
     };
     if (repo) {
@@ -113,8 +114,6 @@ export default function App() {
       live = false;
     };
   }, [repo, handle]);
-
-  const total = source?.total ?? 0;
 
   // Page the next chunk in on demand; guarded so overlapping scroll events don't double-fetch.
   const loadMore = useCallback(async () => {
@@ -176,27 +175,16 @@ export default function App() {
     [service, identity],
   );
 
-  const handleSave = useCallback(
-    (notation: SavedNotation) => {
-      if (!editing || !source) return;
-      const slug = editing.slug;
-      const id = conceptId(editing); // (concept, arity) — overloaded names share a slug
-      // Store the W3C shape: a full <math>…</math> string (texToIntent returns the inner fragment).
-      const rendered = `<math>${notation.mathml}</math>`;
-      const mathml = [rendered, ...editing.mathml.slice(1)];
-      source.applyEdit(id, mathml, notation.tex); // canonical full dataset (used for the PR file)
-      setRows((prev) => prev.map((c) => (conceptId(c) === id ? { ...c, mathml, tex: notation.tex } : c)));
-      if (repo) recordEdit(localStorage, { ...editing, mathml, tex: notation.tex }, editing); // reload-safe
-      setEditing(null);
-
-      // Submit to the service: the bot commits to intent/<handle> and opens/updates the PR.
-      if (!service || !identity) return;
+  // Commit the current dataset to the service (bot → intent/<handle> branch + PR), when configured.
+  const submitFile = useCallback(
+    (message: string) => {
+      if (!service || !identity || !source) return;
       void (async () => {
         try {
           setSubmitState('Submitting…');
           const { prNumber, prUrl } = await submitToService(service.serviceUrl, identity.jwt, {
             content: source.serialize(),
-            message: `Update notation for ${slug} (proposed by @${identity.handle})`,
+            message: `${message} (proposed by @${identity.handle})`,
           });
           setSubmitState(`PR #${prNumber}`);
           window.open(prUrl, '_blank', 'noopener');
@@ -205,8 +193,32 @@ export default function App() {
         }
       })();
     },
-    [editing, source, service, identity, repo],
+    [service, identity, source],
   );
+
+  const handleSave = useCallback(
+    (updated: Concept) => {
+      if (!editing || !source) return;
+      const id = conceptId(editing); // identity when opened — stable even if the edit renames it
+      source.applyEdit(id, updated); // canonical full dataset (used for the PR file)
+      setRows((prev) => prev.map((c) => (conceptId(c) === id ? updated : c)));
+      if (repo) recordEdit(localStorage, id, updated, editing); // reload-safe
+      setEditing(null);
+      submitFile(`Update ${updated.slug}`);
+    },
+    [editing, source, repo, submitFile],
+  );
+
+  const handleDelete = useCallback(() => {
+    if (!editing || !source) return;
+    const id = conceptId(editing);
+    source.remove(id);
+    setRows((prev) => prev.filter((c) => conceptId(c) !== id));
+    setTotal((t) => Math.max(0, t - 1));
+    if (repo) recordEdit(localStorage, id, null, editing); // tombstone for reload/reconcile
+    setEditing(null);
+    submitFile(`Remove ${editing.slug}`);
+  }, [editing, source, repo, submitFile]);
 
   return (
     <div className="app">
@@ -294,9 +306,9 @@ export default function App() {
         {editing && (
           <Suspense fallback={<p className="status">Loading editor…</p>}>
             <NotationEditor
-              concept={editing.slug}
-              initialTex={editing.tex ?? ''}
+              concept={editing}
               onSave={handleSave}
+              onDelete={handleDelete}
               onCancel={() => setEditing(null)}
             />
           </Suspense>

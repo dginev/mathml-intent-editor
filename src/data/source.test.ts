@@ -28,9 +28,10 @@ describe('createSource', () => {
     expect(await src.fetchRange(3, 99)).toHaveLength(2);
   });
 
-  it('applies an edit (MathML + TeX) reflected in fetched ranges and serialization', async () => {
+  it('replaces a row by id (reflected in fetched ranges and serialization)', async () => {
     const src = createSource(make(3));
-    src.applyEdit('c1#', ['<mi intent="x">z</mi>'], '\\arg{x}{z}'); // id = conceptId (slug#arity)
+    const updated = { ...make(1)[0], slug: 'c1', mathml: ['<mi intent="x">z</mi>'], tex: '\\arg{x}{z}' };
+    src.applyEdit('c1#', updated); // id = conceptId (slug#arity); make() has no arity → '#'
 
     const [, c1] = await src.fetchRange(0, 3);
     expect(c1.mathml).toEqual(['<mi intent="x">z</mi>']);
@@ -42,5 +43,13 @@ describe('createSource', () => {
     const e = doc.concepts[0].intents.find((x) => x.concept === 'c1')!;
     expect(e.mathml).toEqual(['<mi intent="x">z</mi>']);
     expect('tex' in e).toBe(false); // tex stays local, never written to open.yml
+  });
+
+  it('removes a row by id and decrements total', async () => {
+    const src = createSource(make(3));
+    src.remove('c1#');
+    expect(src.total).toBe(2);
+    const slugs = (await src.fetchRange(0, 9)).map((c) => c.slug);
+    expect(slugs).toEqual(['c0', 'c2']);
   });
 });

@@ -183,6 +183,56 @@
 }
 
 /* ---- notation editor ---- */
+.fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem 0.8rem;
+  margin-bottom: 1rem;
+}
+.fields .field-wide {
+  grid-column: 1 / -1;
+}
+.fields .field input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+}
+
+.notation-editor button.danger {
+  margin-left: auto;
+  border-color: var(--danger-text);
+  color: var(--danger-text);
+}
+
+.legend {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+  font-size: 0.8rem;
+}
+.legend th,
+.legend td {
+  text-align: left;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.legend th {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.legend code {
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
 .notation-editor h2 {
   font-size: 1rem;
   margin: 0 0 1rem;

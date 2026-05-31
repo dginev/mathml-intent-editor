@@ -12,24 +12,34 @@ import type { Concept } from '../types';
  * canonical full dataset for building PR content, independent of what the UI has paged in.
  */
 export type ConceptSource = {
-  total: number;
+  /** Current row count (decreases on `remove`). */
+  readonly total: number;
   /** Concepts in `[start, end)`, clamped to the available range. */
   fetchRange(start: number, end: number): Promise<Concept[]>;
-  /** Update a row's primary notation (MathML + the TeX it came from). `id` is `conceptId` (name#arity). */
-  applyEdit(id: string, mathml: string[], tex?: string): void;
+  /** Replace the row identified by `id` (`conceptId` it had when opened) with `updated`. */
+  applyEdit(id: string, updated: Concept): void;
+  /** Delete the row identified by `id`. */
+  remove(id: string): void;
   /** Full backing-file content (W3C `open.yml` shape) for committing to GitHub. */
   serialize(): string;
 };
 
 export function createSource(concepts: Concept[]): ConceptSource {
   const all = concepts.slice();
-  const indexOf = new Map(all.map((c, i) => [conceptId(c), i]));
+  // Edits/deletes are rare, so a linear find by conceptId is fine and avoids stale-index bookkeeping.
+  const indexOf = (id: string) => all.findIndex((c) => conceptId(c) === id);
   return {
-    total: all.length,
+    get total() {
+      return all.length;
+    },
     fetchRange: async (start, end) => all.slice(Math.max(0, start), Math.min(end, all.length)),
-    applyEdit: (id, mathml, tex) => {
-      const i = indexOf.get(id);
-      if (i != null) all[i] = { ...all[i], mathml, tex };
+    applyEdit: (id, updated) => {
+      const i = indexOf(id);
+      if (i >= 0) all[i] = updated;
+    },
+    remove: (id) => {
+      const i = indexOf(id);
+      if (i >= 0) all.splice(i, 1);
     },
     serialize: () => serializeConcepts(all),
   };

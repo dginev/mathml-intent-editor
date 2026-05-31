@@ -34,20 +34,27 @@ describe('serializeConcepts', () => {
     expect(doc.concepts[0].intents.map((e) => e.concept)).toEqual(['alpha', 'beta']);
   });
 
-  it('preserves unmodeled fields via raw, and never writes tex', () => {
+  it('preserves truly-unmodeled fields via raw, and never writes tex', () => {
     const out = serializeConcepts([
-      concept({ slug: 'x', tex: '\\arg{a}{x}', raw: { concept: 'x', property: 'symbol', notation: 'legacy', arity: 1 } }),
+      concept({ slug: 'x', property: 'symbol', tex: '\\arg{a}{x}', raw: { concept: 'x', notation: 'legacy' } }),
     ]);
     const e = (parse(out) as { concepts: Array<{ intents: Array<Record<string, unknown>> }> }).concepts[0]
       .intents[0];
-    expect(e.property).toBe('symbol'); // preserved from raw
-    expect(e.notation).toBe('legacy'); // preserved from raw
+    expect(e.notation).toBe('legacy'); // unmodeled — preserved from raw
+    expect(e.property).toBe('symbol'); // modeled — from the concept
     expect('tex' in e).toBe(false); // editor-only, never persisted to the shared file
+  });
+
+  it('deletes a modeled field that was cleared (set to empty)', () => {
+    const out = serializeConcepts([concept({ slug: 'x', area: undefined, raw: { concept: 'x', area: 'old' } })]);
+    const e = (parse(out) as { concepts: Array<{ intents: Array<Record<string, unknown>> }> }).concepts[0]
+      .intents[0];
+    expect('area' in e).toBe(false); // cleared in the model → removed on write
   });
 
   it('round-trips parse → serialize → parse without losing concepts', () => {
     const yaml = serializeConcepts([
-      concept({ slug: 'a', arity: 0, mathml: ['<math><mi>A</mi></math>'], raw: { concept: 'a', property: 'symbol' } }),
+      concept({ slug: 'a', arity: 0, property: 'symbol', mathml: ['<math><mi>A</mi></math>'] }),
       concept({ slug: 'b', arity: 1, mathml: ['<math><mi>B</mi></math>'] }),
     ]);
     const back = parseDictionary(yaml);

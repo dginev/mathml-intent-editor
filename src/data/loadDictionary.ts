@@ -46,7 +46,8 @@ export async function loadDictionary(
   const ancestor: ConceptMap = { ...baseMap };
 
   for (const [id, rec] of Object.entries(edits)) {
-    ours[id] = rec.value;
+    if (rec.value === null) delete ours[id]; // local deletion
+    else ours[id] = rec.value;
     if (rec.baseAtEdit) ancestor[id] = rec.baseAtEdit;
     else delete ancestor[id]; // brand-new concept: absent in the ancestor
   }
