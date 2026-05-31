@@ -6,17 +6,16 @@ import { conceptId } from './data/conceptId';
 import { conceptMatches } from './data/conceptMatch';
 import { byConcept, serializeConcepts } from './data/serialize';
 import {
-  changeSummary,
   classifyChange,
   computeEdits,
   deletedIdsFromEdits,
   effectiveYaml,
-  formatChangeSummary,
-  markdownChangeSummary,
-  prTitle,
   type BaseMap,
   type ChangeKind,
 } from './data/pendingChanges';
+import { buildSubmission } from './github/submission';
+import { useTheme } from './hooks/useTheme';
+import { useGlobalFindShortcut } from './hooks/useGlobalFindShortcut';
 import { ConceptTable } from './components/ConceptTable';
 import { Toast } from './components/ui';
 import {
@@ -35,7 +34,7 @@ import {
 } from './github/auth';
 import { repoConfigFromEnv, serviceConfigFromEnv } from './github/config';
 import { resetSession, submitToService } from './github/submitClient';
-import { clearPr, fetchPullState, loadPr, newBranchName, savePr, type ActivePr } from './github/prSession';
+import { clearPr, fetchPullState, loadPr, savePr, type ActivePr } from './github/prSession';
 import type { Concept } from './types';
 import './App.css';
 
@@ -51,13 +50,6 @@ const PAGE = 50;
 /** Renew the session on a visit once it has dipped below this many seconds (6 of its 7 days) — keeps an
  *  active user signed in indefinitely without renewing a token that was just minted. */
 const RENEW_BELOW_SECONDS = 6 * 24 * 60 * 60;
-
-const THEME_KEY = 'intent-editor.theme';
-type Theme = 'light' | 'dark';
-/** Current theme — the inline script in index.html already set `data-theme` (saved or OS preference). */
-function currentTheme(): Theme {
-  return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
-}
 
 export default function App() {
   const [source, setSource] = useState<ConceptSource | null>(null);
@@ -87,21 +79,7 @@ export default function App() {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const saveDialogRef = useRef<HTMLDialogElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
-
-  // Rebind Ctrl/⌘+F to the in-app Filter (which searches the whole dictionary) — the browser's native
-  // find only sees the virtualized window. Left alone while a modal is open.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F') && !e.shiftKey && !e.altKey) {
-        if (document.querySelector('dialog[open]')) return; // don't hijack find while editing
-        e.preventDefault();
-        filterRef.current?.focus();
-        filterRef.current?.select();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  useGlobalFindShortcut(filterRef); // Ctrl/⌘+F focuses the (whole-dictionary) Filter
 
   // Drive the native modal dialog from `editing` (showModal centres + traps focus; close() on cancel).
   useEffect(() => {
@@ -297,19 +275,7 @@ export default function App() {
     };
   }, [service, identity, expireSession]);
 
-  const [theme, setTheme] = useState<Theme>(currentTheme);
-  const toggleTheme = useCallback(() => {
-    setTheme((prev) => {
-      const next = prev === 'dark' ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-theme', next);
-      try {
-        localStorage.setItem(THEME_KEY, next);
-      } catch {
-        /* ignore storage errors */
-      }
-      return next;
-    });
-  }, []);
+  const [theme, toggleTheme] = useTheme();
 
   // Editing/adding requires a signed-in identity only when a service is configured.
   const gated = useCallback(() => {
@@ -423,11 +389,19 @@ export default function App() {
   const openSavePrompt = useCallback(() => {
     if (!source || !baseMap) return;
     if (!gated()) return;
-    const summary = changeSummary(source.all(), deletedIds, baseMap);
-    setSaveTitle(prTitle(summary, identity?.handle ?? 'me'));
-    setSaveMessage(markdownChangeSummary(summary));
+    const preview = buildSubmission({
+      concepts: source.all(),
+      deletedIds,
+      baseMap,
+      handle: identity?.handle ?? 'me',
+      activeBranch: activePr?.branch ?? null,
+      description: '',
+      now: new Date(),
+    });
+    setSaveTitle(preview.title);
+    setSaveMessage(preview.description); // editable default; the user can refine it
     setSavePrompt(true);
-  }, [source, baseMap, deletedIds, gated, identity]);
+  }, [source, baseMap, deletedIds, gated, identity, activePr]);
 
   // Submit the whole batch to the service (bot → intent/<handle> branch + PR), using the user's
   // description as the commit message. On success the pushed content becomes the new baseline, so the
@@ -436,13 +410,16 @@ export default function App() {
     if (!source || baseline == null || !baseMap) return;
     if (!gated()) return;
     if (!service || !identity) return; // local-only: nothing to submit
-    const content = effectiveYaml(source.all(), deletedIds);
-    const summary = changeSummary(source.all(), deletedIds, baseMap);
-    const description = saveMessage.trim() || markdownChangeSummary(summary); // the Markdown PR body
-    const message = formatChangeSummary(summary) || `Update open.yml (proposed by @${identity.handle})`;
-    // Reuse the open PR's branch (a new commit updates it); otherwise mint a fresh unique branch.
-    const firstConcept = [...summary.added, ...summary.modified, ...summary.deleted].sort()[0] ?? 'update';
-    const branch = activePr ? activePr.branch : newBranchName(identity.handle, firstConcept, new Date());
+    // Reuse the open PR's branch (a new commit updates it); otherwise a fresh unique branch.
+    const { content, branch, ...payload } = buildSubmission({
+      concepts: source.all(),
+      deletedIds,
+      baseMap,
+      handle: identity.handle,
+      activeBranch: activePr?.branch ?? null,
+      description: saveMessage,
+      now: new Date(),
+    });
     void (async () => {
       try {
         setSaving(true);
@@ -450,10 +427,8 @@ export default function App() {
         setSubmitState('Submitting…');
         const { prNumber, prUrl } = await submitToService(service.serviceUrl, identity.jwt, {
           content,
-          message,
-          title: saveTitle,
-          description,
           branch,
+          ...payload, // message, title, description
         });
         // Enact deletions, then adopt the pushed content as the new baseline (clean session).
         for (const id of deletedIds) source.remove(id);
@@ -485,7 +460,7 @@ export default function App() {
         setSavePrompt(false); // close the confirm modal so the toast / red Save button are visible
       }
     })();
-  }, [source, baseline, baseMap, deletedIds, gated, service, identity, activePr, saveTitle, saveMessage, expireSession]);
+  }, [source, baseline, baseMap, deletedIds, gated, service, identity, activePr, saveMessage, expireSession]);
 
   const dismissSaveError = useCallback(() => setSaveError(null), []);
 
