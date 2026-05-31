@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clearEdits } from './data/editCache';
 import { conceptId } from './data/conceptId';
-import { conceptMatches } from './data/conceptMatch';
+import { conceptMatches, matchRank } from './data/conceptMatch';
 import { classifyChange, type ChangeKind } from './data/pendingChanges';
 import { buildSubmission } from './github/submission';
 import { useDictionary } from './hooks/useDictionary';
@@ -260,10 +260,17 @@ export default function App() {
   // ungated in local-only mode (no service), otherwise only while signed in.
   const canEdit = !service || !!identity;
 
-  // Filtering searches the WHOLE dictionary and shows every match unpaged; clearing the filter resumes
-  // the paged prefix.
+  // Filtering searches the WHOLE dictionary and shows every match unpaged, ranked by which cell matched
+  // (concept → speech → area → alias); a stable sort keeps canonical order within each rank. Clearing
+  // the filter resumes the paged prefix.
   const filtering = filter.trim() !== '';
-  const visible = filtering ? concepts.filter((c) => conceptMatches(c, filter)) : concepts.slice(0, loadedCount);
+  const visible = filtering
+    ? concepts
+        .filter((c) => conceptMatches(c, filter))
+        .map((c) => ({ c, rank: matchRank(c, filter) }))
+        .sort((a, b) => a.rank - b.rank)
+        .map((x) => x.c)
+    : concepts.slice(0, loadedCount);
   // All concept names — the editor highlights an alias that names a known concept.
   const knownSlugs = useMemo(() => new Set(concepts.map((c) => c.slug)), [concepts]);
 
