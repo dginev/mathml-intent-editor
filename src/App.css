@@ -475,18 +475,18 @@
   gap: 0.4rem;
   width: 100%;
 }
+/* Language badge/input share the slender look of the TeX / Raw MathML toggle buttons. */
 .lang-badge {
   flex: none;
-  min-width: 2.2rem;
   text-align: center;
-  padding: 0.15rem 0.4rem;
-  border: 1px solid var(--accent);
-  border-radius: 999px;
-  background: var(--annot-bg);
-  color: var(--annot-text);
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-muted);
   font-family: var(--mono);
-  font-size: 0.72rem;
-  margin-top: 0.15rem;
+  font-size: 0.7rem;
+  margin-top: 0.25rem;
 }
 .speech-text {
   flex: 1;
@@ -500,12 +500,13 @@
   flex: none;
   width: 3.4rem;
   font-family: var(--mono);
-  font-size: 0.85rem;
-  padding: 0.35rem 0.4rem;
+  font-size: 0.7rem;
+  padding: 0.1rem 0.45rem;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg);
   color: inherit;
+  margin-top: 0.2rem;
 }
 .speech-input {
   flex: 1;
