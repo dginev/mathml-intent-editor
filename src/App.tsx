@@ -3,6 +3,7 @@ import { createSeedSource, createSource, type ConceptSource } from './data/sourc
 import { loadDictionary } from './data/loadDictionary';
 import { loadEdits, recordEdit, clearEdits } from './data/editCache';
 import { conceptId } from './data/conceptId';
+import { byConcept } from './data/serialize';
 import { ConceptTable } from './components/ConceptTable';
 import {
   buildAuthorizeUrl,
@@ -45,8 +46,13 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
   const [editing, setEditing] = useState<Concept | null>(null);
+  const [creating, setCreating] = useState(false); // the open modal is for a brand-new concept
   const [conflicts, setConflicts] = useState<string[]>([]);
   const [total, setTotal] = useState(0); // row count (set on load, decremented on delete)
+  // Edits/adds/deletes batch locally; one Save submits the whole batch as a single PR update.
+  const [dirty, setDirty] = useState(() => Object.keys(loadEdits(localStorage)).length > 0);
+  const [saving, setSaving] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null); // row flashed red pre-confirm
   // The PR the user's branch terminates in; when it closes/merges we reset the session and reload.
   const [activePr, setActivePr] = useState<ActivePr | null>(() => loadPr(localStorage));
   const [reloadKey, setReloadKey] = useState(0); // bump to force a fresh dictionary load
@@ -198,64 +204,117 @@ export default function App() {
     });
   }, []);
 
-  // Editing requires a signed-in identity only when a service is configured.
+  // Editing/adding requires a signed-in identity only when a service is configured.
+  const gated = useCallback(() => {
+    if (service && !identity) {
+      setSubmitState('Sign in with GitHub to suggest edits.');
+      return false;
+    }
+    return true;
+  }, [service, identity]);
+
   const openEditor = useCallback(
     (concept: Concept) => {
-      if (service && !identity) {
-        setSubmitState('Sign in with GitHub to suggest edits.');
-        return;
-      }
+      if (!gated()) return;
+      setCreating(false);
       setEditing(concept);
     },
-    [service, identity],
+    [gated],
   );
 
-  // Commit the current dataset to the service (bot → intent/<handle> branch + PR), when configured.
-  const submitFile = useCallback(
-    (message: string) => {
-      if (!service || !identity || !source) return;
-      void (async () => {
-        try {
-          setSubmitState('Submitting…');
-          const { prNumber, prUrl } = await submitToService(service.serviceUrl, identity.jwt, {
-            content: source.serialize(),
-            message: `${message} (proposed by @${identity.handle})`,
-          });
-          savePr(localStorage, { number: prNumber, url: prUrl }); // track it so we can detect closure
-          setActivePr({ number: prNumber, url: prUrl });
-          setSubmitState(`PR #${prNumber}`);
-          window.open(prUrl, '_blank', 'noopener');
-        } catch (e) {
-          setSubmitState(`Submit failed: ${e instanceof Error ? e.message : String(e)}`);
-        }
-      })();
-    },
-    [service, identity, source],
-  );
+  // Open the modal on a blank concept — saved as a new row on "Done".
+  const openCreate = useCallback(() => {
+    if (!gated()) return;
+    setCreating(true);
+    setEditing({ slug: '', mathml: [], links: [], alias: [] });
+  }, [gated]);
 
+  const closeModal = useCallback(() => {
+    setEditing(null);
+    setCreating(false);
+  }, []);
+
+  // "Done" — apply the edit/addition to local state only (batched); the global Save submits later.
   const handleSave = useCallback(
     (updated: Concept) => {
-      if (!editing || !source) return;
-      const id = conceptId(editing); // identity when opened — stable even if the edit renames it
-      source.applyEdit(id, updated); // canonical full dataset (used for the PR file)
-      setRows((prev) => prev.map((c) => (conceptId(c) === id ? updated : c)));
-      if (repo) recordEdit(localStorage, id, updated, editing); // reload-safe
+      if (!source) return;
+      if (creating) {
+        source.add(updated);
+        setRows((prev) => [...prev, updated].sort(byConcept)); // show it in canonical position
+        setTotal((t) => t + 1);
+        if (repo) recordEdit(localStorage, conceptId(updated), updated, null); // brand-new → no ancestor
+      } else if (editing) {
+        const id = conceptId(editing); // identity when opened — stable even if the edit renames it
+        source.applyEdit(id, updated);
+        setRows((prev) => prev.map((c) => (conceptId(c) === id ? updated : c)));
+        if (repo) recordEdit(localStorage, id, updated, editing); // reload-safe
+      }
+      setDirty(true);
+      setCreating(false);
       setEditing(null);
-      submitFile(`Update ${updated.slug}`);
     },
-    [editing, source, repo, submitFile],
+    [editing, creating, source, repo],
+  );
+
+  // Apply a deletion to local state only (batched). Shared by the modal Delete and the row ✗.
+  const deleteConcept = useCallback(
+    (concept: Concept) => {
+      if (!source) return;
+      const id = conceptId(concept);
+      source.remove(id);
+      setRows((prev) => prev.filter((c) => conceptId(c) !== id));
+      setTotal((t) => Math.max(0, t - 1));
+      if (repo) recordEdit(localStorage, id, null, concept); // tombstone for reload/reconcile
+      setDirty(true);
+    },
+    [source, repo],
   );
 
   const handleDelete = useCallback(() => {
-    if (!editing || !source) return;
-    const id = conceptId(editing);
-    source.remove(id);
-    setRows((prev) => prev.filter((c) => conceptId(c) !== id));
-    setTotal((t) => Math.max(0, t - 1));
-    if (repo) recordEdit(localStorage, id, null, editing); // tombstone for reload/reconcile
+    if (editing) deleteConcept(editing);
     setEditing(null);
-    submitFile(`Remove ${editing.slug}`);
-  }, [editing, source, repo, submitFile]);
+  }, [editing, deleteConcept]);
+
+  // Row ✗: flash the row red, then confirm before finalizing (deferred so the red paints first).
+  const handleRowDelete = useCallback(
+    (concept: Concept) => {
+      if (!gated()) return;
+      setPendingDeleteId(conceptId(concept));
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          if (confirm(`Remove concept "${concept.slug}"?`)) deleteConcept(concept);
+          setPendingDeleteId(null);
+        }),
+      );
+    },
+    [gated, deleteConcept],
+  );
+
+  // Commit the whole batch to the service (bot → intent/<handle> branch + PR), when configured.
+  const saveBatch = useCallback(() => {
+    if (!source) return;
+    if (!gated()) return;
+    if (!service || !identity) return; // local-only: nothing to submit
+    void (async () => {
+      try {
+        setSaving(true);
+        setSubmitState('Submitting…');
+        const { prNumber, prUrl } = await submitToService(service.serviceUrl, identity.jwt, {
+          content: source.serialize(),
+          message: `Update open.yml (proposed by @${identity.handle})`,
+        });
+        savePr(localStorage, { number: prNumber, url: prUrl }); // track it so we can detect closure
+        setActivePr({ number: prNumber, url: prUrl });
+        setSubmitState(`PR #${prNumber}`);
+        setDirty(false);
+        window.open(prUrl, '_blank', 'noopener');
+      } catch (e) {
+        setSubmitState(`Submit failed: ${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        setSaving(false);
+      }
+    })();
+  }, [source, gated, service, identity]);
 
   return (
     <div className="app">
@@ -319,14 +378,41 @@ export default function App() {
         {error && <p className="error">{error}</p>}
         {!source && !error && <p className="status">Loading dictionary…</p>}
         {source && (
-          <ConceptTable
-            data={rows}
-            total={total}
-            filter={filter}
-            onSelect={openEditor}
-            onLoadMore={loadMore}
-            editingId={editing ? conceptId(editing) : null}
-          />
+          <>
+            <div className="body-toolbar">
+              <button type="button" className="add-entry" onClick={openCreate}>
+                + Add entry
+              </button>
+              {service && (
+                <button
+                  type="button"
+                  className="save-batch"
+                  data-testid="save-batch"
+                  disabled={!dirty || saving}
+                  onClick={saveBatch}
+                  title={dirty ? 'Submit all pending changes as one PR' : 'No pending changes'}
+                >
+                  {saving ? (
+                    <>
+                      <span className="spinner" aria-hidden="true" /> Saving…
+                    </>
+                  ) : (
+                    'Save'
+                  )}
+                </button>
+              )}
+            </div>
+            <ConceptTable
+              data={rows}
+              total={total}
+              filter={filter}
+              onSelect={openEditor}
+              onLoadMore={loadMore}
+              editingId={editing ? conceptId(editing) : null}
+              onDelete={handleRowDelete}
+              pendingDeleteId={pendingDeleteId}
+            />
+          </>
         )}
       </div>
 
@@ -334,10 +420,10 @@ export default function App() {
       <dialog
         ref={dialogRef}
         className="modal"
-        aria-label={editing ? `Edit notation: ${editing.slug}` : undefined}
-        onClose={() => setEditing(null)}
+        aria-label={editing ? (creating ? 'Add concept' : `Edit notation: ${editing.slug}`) : undefined}
+        onClose={closeModal}
         onClick={(e) => {
-          if (e.target === dialogRef.current) setEditing(null); // backdrop click
+          if (e.target === dialogRef.current) closeModal(); // backdrop click
         }}
       >
         {editing && (
@@ -345,8 +431,8 @@ export default function App() {
             <NotationEditor
               concept={editing}
               onSave={handleSave}
-              onDelete={handleDelete}
-              onCancel={() => setEditing(null)}
+              onDelete={creating ? undefined : handleDelete} // nothing to delete for a brand-new row
+              onCancel={closeModal}
               knownSlugs={source?.slugSet()}
             />
           </Suspense>
