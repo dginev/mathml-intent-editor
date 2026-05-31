@@ -230,7 +230,7 @@
 }
 .legend code {
   font-size: 0.78rem;
-  white-space: nowrap;
+  overflow-wrap: anywhere; /* let the longer example wrap within its column */
 }
 
 .notation-editor h2 {
