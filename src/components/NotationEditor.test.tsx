@@ -83,4 +83,30 @@ describe('NotationEditor', () => {
     fireEvent.click(screen.getByTestId('delete'));
     expect(onDelete).toHaveBeenCalledTimes(1);
   });
+
+  it('authors raw MathML (seeded with the current) and clears tex', () => {
+    const onSave = vi.fn();
+    render(<NotationEditor concept={base} onSave={onSave} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Raw MathML' }));
+    const raw = screen.getByTestId('mathml-input') as HTMLTextAreaElement;
+    expect(raw.value).toBe('<math><mi>old</mi></math>'); // seeded from the concept
+    fireEvent.change(raw, { target: { value: '<math><mi intent="x">Z</mi></math>' } });
+    fireEvent.click(screen.getByTestId('save'));
+    const c = onSave.mock.calls[0][0] as Concept;
+    expect(c.mathml[0]).toBe('<math><mi intent="x">Z</mi></math>');
+    expect(c.tex).toBeUndefined();
+  });
+
+  it('toggles the macro legend with the info button (hidden by default)', () => {
+    render(<NotationEditor concept={base} onSave={vi.fn()} />);
+    expect(screen.queryByTestId('legend')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Macro help'));
+    expect(screen.getByTestId('legend')).toBeInTheDocument();
+  });
+
+  it('warns when a speech $ref is not marked in the notation', () => {
+    // base.en references $x, but base.mathml has no arg="x"
+    render(<NotationEditor concept={base} onSave={vi.fn()} />);
+    expect(screen.getByTestId('ref-warning')).toHaveTextContent('$x');
+  });
 });
