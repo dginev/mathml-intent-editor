@@ -21,8 +21,12 @@ const NO_SLUGS: ReadonlySet<string> = new Set();
 /** Next stable row id: one past the current max, so it stays unique as rows are added/removed. */
 const nextId = (rows: { id: number }[]) => rows.reduce((m, r) => Math.max(m, r.id), -1) + 1;
 
-/** A fresh link/alias row (blank, open for editing). */
+/** A fresh link/alias/notation row (blank, open for editing). */
 const blankEntry = () => ({ value: '' });
+
+/** True if a string isn't well-formed XML (used to validate raw-MathML notations before saving). */
+const xmlError = (s: string): boolean =>
+  new DOMParser().parseFromString(s, 'application/xml').querySelector('parsererror') !== null;
 /** A fresh speech row — the first one defaults to English, later ones start with an empty code. */
 const blankSpeech = (rows: SpeechRow[]) => ({
   lang: rows.some((r) => r.lang.trim() === 'en') ? '' : 'en',
@@ -141,6 +145,11 @@ export function NotationEditor({
   // Notation is authored EITHER as TeX (rendered to MathML) OR as raw MathML, seeded with the current.
   const [mode, setMode] = useState<'tex' | 'mathml'>('tex');
   const [rawMathml, setRawMathml] = useState(concept.mathml[0] ?? '');
+  // Additional renderings (mathml[1..]) — edited as raw MathML so stale arg/intent names can be fixed.
+  const [extraRows, extraOps] = useRowList<EditRow>(
+    () => concept.mathml.slice(1).map((value, i) => ({ id: i, value, editing: false })),
+    blankEntry,
+  );
 
   const [engine, setEngine] = useState<TemmlEngine | null>(null);
   useEffect(() => {
@@ -158,11 +167,15 @@ export function NotationEditor({
     [engine, hasTex, tex, slug],
   );
   // Raw mode: check the typed MathML is well-formed XML.
-  const rawError = useMemo(() => {
-    if (mode !== 'mathml' || rawMathml.trim() === '') return null;
-    const doc = new DOMParser().parseFromString(rawMathml, 'application/xml');
-    return doc.querySelector('parsererror') ? 'Malformed XML / MathML' : null;
-  }, [mode, rawMathml]);
+  const rawError = useMemo(
+    () => (mode === 'mathml' && rawMathml.trim() !== '' && xmlError(rawMathml) ? 'Malformed XML / MathML' : null),
+    [mode, rawMathml],
+  );
+  // Any non-empty additional notation that's malformed blocks saving.
+  const extraBlocks = useMemo(
+    () => extraRows.some((r) => r.value.trim() !== '' && xmlError(r.value)),
+    [extraRows],
+  );
 
   // Resolve the active notation per mode: the MathML it produces (null = keep the existing one), its
   // error, and whether that error blocks saving.
@@ -171,7 +184,7 @@ export function NotationEditor({
   const newMathml: string | null = mode === 'tex' ? texMathml : rawMathmlOut;
   const notationError = mode === 'tex' ? (hasTex && texResult && !texResult.ok ? texResult.error : null) : rawError;
   const notationBlocks = mode === 'tex' ? hasTex && (!engine || !texResult?.ok) : !!rawError;
-  const canSave = slug.trim() !== '' && !notationBlocks;
+  const canSave = slug.trim() !== '' && !notationBlocks && !extraBlocks;
 
   // What the preview + validation use: the new notation, else the concept's existing first rendering.
   const effectiveMathml = newMathml ?? concept.mathml[0] ?? null;
@@ -191,7 +204,10 @@ export function NotationEditor({
   );
 
   const buildUpdated = (): Concept => {
-    const mathml = newMathml ? [newMathml, ...concept.mathml.slice(1)] : concept.mathml;
+    // Primary rendering (TeX/raw editor) + the edited additional renderings.
+    const primary = newMathml ?? concept.mathml[0] ?? null;
+    const extras = extraRows.map((r) => r.value.trim()).filter(Boolean);
+    const mathml = primary != null ? [primary, ...extras] : extras;
     const n = Number(arity);
     // Speech rows split back into `en` (English) + `speech` (other valid, non-empty ISO 639-1 languages).
     const en = speechRows.find((r) => r.lang.trim() === 'en')?.text.trim() || undefined;
@@ -409,6 +425,55 @@ export function NotationEditor({
           </div>
         </div>
       )}
+
+      {/* Additional renderings (mathml[1..]). Raw MathML so stale arg/intent names can be fixed. */}
+      <div className="field">
+        <span className="field-head">
+          Additional notations
+          <InfoPopover label="Additional notations help">
+            <p className="legend-note">
+              Extra renderings of this concept, each a full <code>{'<math>…</math>'}</code>. Edit the raw
+              MathML and keep its <code>arg</code>/<code>intent</code> names in sync with the concept.
+            </p>
+          </InfoPopover>
+        </span>
+        <div className="notation-list" data-testid="notation-list">
+          {extraRows.map((row) => {
+            const malformed = row.value.trim() !== '' && xmlError(row.value);
+            return (
+              <div className="notation-row" key={row.id}>
+                <textarea
+                  className="extra-notation"
+                  aria-label="Additional MathML"
+                  rows={3}
+                  spellCheck={false}
+                  placeholder="<math>…</math>"
+                  value={row.value}
+                  onChange={(e) => extraOps.patch(row.id, { value: e.target.value })}
+                />
+                <div className="extra-preview">
+                  {row.value.trim() === '' ? (
+                    <span className="hint">empty</span>
+                  ) : malformed ? (
+                    <span className="error">Malformed MathML</span>
+                  ) : (
+                    <MathML className="preview" markup={row.value} />
+                  )}
+                </div>
+                <IconButton
+                  label="Remove notation"
+                  icon="×"
+                  title="Remove"
+                  onClick={() => extraOps.remove(row.id)}
+                />
+              </div>
+            );
+          })}
+          <button type="button" className="add-link" onClick={extraOps.add}>
+            + Add notation
+          </button>
+        </div>
+      </div>
 
       <div className="pair">
         <div className="field">

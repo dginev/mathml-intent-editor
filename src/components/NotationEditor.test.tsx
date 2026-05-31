@@ -115,6 +115,40 @@ describe('NotationEditor', () => {
     expect(onDelete).toHaveBeenCalledTimes(1);
   });
 
+  it('edits an additional notation (mathml[1..]) and saves all renderings', () => {
+    const onSave = vi.fn();
+    const c: Concept = {
+      ...base,
+      mathml: ['<math><mi>p</mi></math>', "<math><msub><mi>ad</mi><mi arg='a1'>f</mi></msub></math>"],
+    };
+    render(<NotationEditor concept={c} onSave={onSave} />);
+    const extra = screen.getByLabelText('Additional MathML') as HTMLTextAreaElement;
+    expect(extra.value).toBe("<math><msub><mi>ad</mi><mi arg='a1'>f</mi></msub></math>"); // seeded
+    fireEvent.change(extra, {
+      target: { value: "<math><msub><mi>ad</mi><mi arg='g'>f</mi></msub></math>" },
+    });
+    fireEvent.click(screen.getByTestId('save'));
+    const saved = onSave.mock.calls[0][0] as Concept;
+    expect(saved.mathml).toEqual([
+      '<math><mi>p</mi></math>',
+      "<math><msub><mi>ad</mi><mi arg='g'>f</mi></msub></math>",
+    ]);
+  });
+
+  it('adds an additional notation and blocks saving while it is malformed', () => {
+    const onSave = vi.fn();
+    render(<NotationEditor concept={base} onSave={onSave} />);
+    fireEvent.click(screen.getByRole('button', { name: '+ Add notation' }));
+    const extra = screen.getByLabelText('Additional MathML');
+    fireEvent.change(extra, { target: { value: '<math><mo>+' } }); // malformed
+    expect(screen.getByTestId('save')).toBeDisabled();
+    fireEvent.change(extra, { target: { value: '<math><mo>+</mo></math>' } }); // fixed
+    expect(screen.getByTestId('save')).toBeEnabled();
+    fireEvent.click(screen.getByTestId('save'));
+    const saved = onSave.mock.calls[0][0] as Concept;
+    expect(saved.mathml).toEqual(['<math><mi>old</mi></math>', '<math><mo>+</mo></math>']);
+  });
+
   it('authors raw MathML (seeded with the current) and clears tex', () => {
     const onSave = vi.fn();
     render(<NotationEditor concept={base} onSave={onSave} />);
