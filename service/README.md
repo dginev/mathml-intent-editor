@@ -1,22 +1,29 @@
-# MathML Intent Open Editor — OAuth exchange service
+# MathML Intent Open Editor — auth + PR service
 
-A tiny Fastify service whose only job is to hold the secret the browser can't: it finishes GitHub
-sign-in by exchanging the OAuth `code` for the user's **access token**. Everything else — fork, commit,
-open the PR — the browser does itself, directly against `api.github.com` with that token, so the PR is
-genuinely the user's and the commit earns them contribution credit. Deployed on the `latexml.rs` VM
-behind Caddy.
-
-Why a server at all: `github.com/login/oauth/access_token` sends no CORS headers and needs the OAuth App
-**client secret**, so the code→token exchange can't happen in the browser. `api.github.com` *is*
-CORS-enabled, so all the read/write REST calls stay client-side.
+A small Fastify service that holds the secrets the browser can't: it finishes GitHub sign-in and opens
+PRs as our controlled bot (a GitHub App installation). Deployed on the `latexml.rs` VM behind Caddy.
 
 ## Endpoints
-- `POST /auth` `{ code }` → `{ handle, token }` — exchange the OAuth `code` (OAuth App client_id+secret)
-  and read the user's `@handle` (`GET /user`). The **user's** access token is returned to the browser.
+- `POST /auth` `{ code }` → `{ jwt, handle }` — exchange the OAuth `code` (App client_id+secret), read
+  the user's `@handle`, return a signed identity JWT (sliding **7-day** TTL). The user token is discarded.
+- `POST /renew` (`Authorization: Bearer <jwt>`) → `{ jwt, handle }` — sliding session: verify the
+  still-valid token and re-issue a fresh-TTL one (no GitHub round-trip). An expired token can't renew
+  (→ 401), so an absence longer than the TTL forces a re-auth. The client calls this on each visit once
+  the token has aged past its first day.
+- `POST /submit` (`Authorization: Bearer <jwt>`, body `{ content, message?, title?, description?, branch? }`)
+  → `{ prNumber, prUrl }` — verify the JWT, then as the bot commit `content` to `branch` (commit message
+  `message`) and ensure the PR is open, setting its **title** and **Markdown body** from
+  `title`/`description` (attribution footer appended; refreshed on each submit). The client picks a
+  unique `branch` (`<handle>-<YYYYMMDD>-<first-concept>`) — reusing the open PR's branch so a new commit
+  updates it, or a fresh name once the PR closed. If that branch has no open PR, the stale branch is
+  dropped first so the new PR is cut off the current base. (Falls back to `intent/<handle>` if omitted.)
+- `POST /reset` (`Authorization: Bearer <jwt>`, body `{ branch? }`) → `{ deleted }` — verify the JWT,
+  then as the bot delete `branch` (no-op if absent). The client calls this when it detects its PR was
+  closed/merged, so the next edit starts a fresh branch.
 - `GET /health` → `{ ok: true }`.
 
-Logic split: `handlers.js` (pure, unit-tested with `node --test`), `github.js` (OAuth exchange + the
-`GET /user` lookup), `server.js` (Fastify wiring).
+Logic split: `handlers.js` (pure, unit-tested with `node --test`), `github.js` (Octokit + App auth),
+`session.js` (JWT), `server.js` (Fastify wiring).
 
 ## Local
 ```sh
@@ -39,12 +46,15 @@ node --env-file=.env src/server.js
    cd /opt/mathml-intent/service && npm install --omit=dev
    # redeploy (code-only): rsync -avz --exclude node_modules --exclude .git service/ root@latexml.rs:/opt/mathml-intent/service/ && ssh root@latexml.rs systemctl restart mathml-intent
    ```
-3. **Secret** (root-only) — just the OAuth App client secret now (no bot key, no JWT secret):
+3. **Secrets** (root-only):
    ```sh
    mkdir -p /etc/mathml-intent
-   cp service/.env.example /etc/mathml-intent/service.env   # fill GH_CLIENT_ID + GH_CLIENT_SECRET
+   cp service/.env.example /etc/mathml-intent/service.env   # fill GH_CLIENT_SECRET + JWT_SECRET
    chmod 600 /etc/mathml-intent/service.env
+   # put the App private key (.pem you downloaded) here:
+   install -m 600 app-private-key.pem /etc/mathml-intent/app-private-key.pem
    ```
+   Generate the JWT secret: `openssl rand -hex 32`.
 4. **systemd unit** `/etc/systemd/system/mathml-intent.service`:
    ```ini
    [Unit]
@@ -74,5 +84,5 @@ node --env-file=.env src/server.js
    Caddy auto-provisions the TLS cert. CORS is handled by the service (`ALLOWED_ORIGIN`).
 6. **Verify:** `curl https://intent-api.latexml.rs/health` → `{"ok":true}`.
 
-The app points at this via `VITE_GH_SERVICE=https://intent-api.latexml.rs` and `VITE_GH_CLIENT_ID` (the
-OAuth App's public client id), plus `VITE_GH_OWNER`/`VITE_GH_REPO`.
+The app points at this via `VITE_GH_OAUTH_PROXY=https://intent-api.latexml.rs` (and `VITE_GH_CLIENT_ID`,
+`VITE_GH_OWNER`, `VITE_GH_REPO`).

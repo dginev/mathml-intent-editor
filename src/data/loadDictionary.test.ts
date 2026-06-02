@@ -66,23 +66,6 @@ describe('loadDictionary', () => {
     expect(concepts.map((c) => c.slug)).toContain('extra');
   });
 
-  it('reads the branch from the fork owner (branchOwner), not the canonical owner', async () => {
-    const seen: string[] = [];
-    const fetchImpl = (async (url: string) => {
-      seen.push(url);
-      if (url.includes('/dginev/mathml-intent-open/main/'))
-        return { ok: true, status: 200, text: async () => doc({ power: 'p' }) };
-      if (url.includes('/alice/mathml-intent-open/'))
-        return { ok: true, status: 200, text: async () => doc({ power: 'p', forked: 'f' }) };
-      return { ok: false, status: 404, text: async () => '' };
-    }) as unknown as typeof fetch;
-    const { concepts } = await loadDictionary(
-      args({ branch: 'alice-1', branchOwner: 'alice', fetchImpl }),
-    );
-    expect(concepts.map((c) => c.slug)).toContain('forked'); // read from the fork
-    expect(seen.some((u) => u.includes('/alice/mathml-intent-open/alice-1/open.yml'))).toBe(true);
-  });
-
   it('drops a concept the user deleted locally (null tombstone)', async () => {
     const edits: EditCache = {
       'power#': { value: null, baseAtEdit: { slug: 'power', mathml: ['p'], links: [], alias: [] } as Concept },

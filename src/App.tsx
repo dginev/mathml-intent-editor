@@ -12,7 +12,7 @@ import { useGlobalFindShortcut } from './hooks/useGlobalFindShortcut';
 import { ConceptTable } from './components/ConceptTable';
 import { Toast } from './components/ui';
 import { repoConfigFromEnv, serviceConfigFromEnv } from './github/config';
-import { deleteBranch, submitViaFork } from './github/userSubmit';
+import { resetSession, submitToService } from './github/submitClient';
 import { clearPr, fetchPullState, loadPr, savePr, type ActivePr } from './github/prSession';
 import type { Concept } from './types';
 import './App.css';
@@ -21,6 +21,9 @@ import './App.css';
 const NotationEditor = lazy(() =>
   import('./components/NotationEditor').then((m) => ({ default: m.NotationEditor })),
 );
+
+const SESSION_EXPIRED =
+  'Your session expired — you’ve been signed out. Sign in again to continue (your changes are kept).';
 
 /** Read the deep-link filter from the current URL (`?filter=…`). */
 const filterFromUrl = () => new URLSearchParams(window.location.search).get('filter') ?? '';
@@ -79,14 +82,15 @@ export default function App() {
   const ready = dict.status === 'ready';
   const total = concepts.length;
 
-  // Identity (OAuth completion + the stored handle/token). The token is long-lived (classic OAuth), so
-  // a session ends only via sign-out or a rejected api.github.com call (401 → sign out).
+  // Identity + session lifecycle (OAuth completion, sliding-TTL token, proactive sign-out, renew). The
+  // status-line message + the expiry toast are page concerns, delivered via callbacks.
   const [submitState, setSubmitState] = useState<string | null>(null);
   const { identity, authPending, signIn, expireSession } = useIdentity({
     service,
     // Sign-in failures (incl. OAuth `?error=` returns) reach the user via the Toast — the status line is
-    // hidden while signed out, which is exactly when these occur.
+    // hidden while signed out, which is exactly when these occur. Same channel as a session expiry.
     onSignInError: setSaveError,
+    onSessionExpired: () => setSaveError(SESSION_EXPIRED),
   });
 
   // Sign out: drop the identity AND the PR pointer, then reload from base (no branch-reconciled view).
@@ -98,17 +102,16 @@ export default function App() {
     setReloadKey((k) => k + 1);
   }, [expireSession]);
 
-  // When the user's working PR is closed or merged, end the session: delete the (now stale) branch in
-  // their fork, drop local edits, and reload clean from the base branch. Checked on mount and whenever
-  // the tab regains focus (e.g. after closing the PR on GitHub in another tab).
+  // When the user's working PR is closed or merged, end the session: ask the service to delete the
+  // (now stale) intent/<handle> branch, drop local edits, and reload clean from the base branch. Checked
+  // on mount and whenever the tab regains focus (e.g. after closing the PR on GitHub in another tab).
   const resetIfPrClosed = useCallback(async () => {
     if (!service || !repo || !identity || !activePr) return;
     if ((await fetchPullState(repo.owner, repo.repo, activePr.number)) !== 'closed') return;
     try {
-      // Delete the closed branch in the fork (best-effort); the next Save self-heals a stale branch too.
-      await deleteBranch({ owner: activePr.headOwner, repo: repo.repo, branch: activePr.branch, token: identity.token });
+      await resetSession(service.serviceUrl, identity.jwt, activePr.branch); // delete the closed branch (best-effort)
     } catch {
-      /* lazy cleanup on the next Save covers a failed delete */
+      /* lazy cleanup on the next /submit covers a failed reset */
     }
     clearEdits(localStorage);
     clearPr(localStorage);
@@ -215,13 +218,13 @@ export default function App() {
     setSavePrompt(true);
   }, [ready, concepts, baseMap, deletedIds, gated, identity, activePr]);
 
-  // Submit the whole batch as the user's own PR: their token forks (unless they're the maintainer),
-  // commits open.yml, and opens/updates the PR — all client-side via api.github.com. On success the
-  // pushed content becomes the new baseline, so the session returns to a clean state.
+  // Submit the whole batch to the service (bot → intent/<handle> branch + PR), using the user's
+  // description as the commit message. On success the pushed content becomes the new baseline, so the
+  // session returns to a clean state.
   const submitBatch = useCallback(() => {
     if (!ready) return;
     if (!gated()) return;
-    if (!service || !identity || !repo) return; // local-only: nothing to submit
+    if (!service || !identity) return; // local-only: nothing to submit
     // Reuse the open PR's branch (a new commit updates it); otherwise a fresh unique branch.
     const { content, branch, ...payload } = buildSubmission({
       concepts,
@@ -237,13 +240,7 @@ export default function App() {
         setSaving(true);
         setSaveError(null); // clear any prior failure on retry
         setSubmitState('Submitting…');
-        const { prNumber, prUrl, headOwner } = await submitViaFork({
-          owner: repo.owner,
-          repo: repo.repo,
-          baseBranch: repo.baseBranch,
-          filePath: repo.filePath,
-          handle: identity.handle,
-          token: identity.token,
+        const { prNumber, prUrl } = await submitToService(service.serviceUrl, identity.jwt, {
           content,
           branch,
           ...payload, // message, title, description
@@ -252,18 +249,17 @@ export default function App() {
         // by the persist effect.
         dispatch({ type: 'committed', content });
         const isNewPr = !activePr || activePr.number !== prNumber;
-        const pr = { number: prNumber, url: prUrl, branch, headOwner };
-        savePr(localStorage, pr); // track it (incl. the fork it lives in) so we can detect closure
-        setActivePr(pr);
+        savePr(localStorage, { number: prNumber, url: prUrl, branch }); // track it so we can detect closure
+        setActivePr({ number: prNumber, url: prUrl, branch });
         setSubmitState(isNewPr ? `PR #${prNumber}` : `PR #${prNumber} updated`);
         if (isNewPr) window.open(prUrl, '_blank', 'noopener'); // updates land on the same PR — no new tab
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        // 401 = GitHub rejected our token (revoked/invalid) — sign out so the UI reflects it, then tell
-        // the user to sign in again. Other failures keep the session and just report.
-        if (/\b401\b|bad credentials|unauthor/i.test(msg)) {
+        // 401 = the service rejected our session token (expired/invalid) — sign out so the UI reflects
+        // it, then tell the user to sign in again. Other failures keep the session and just report.
+        if (/\b401\b|invalid session|token|unauthor/i.test(msg)) {
           expireSession();
-          setSaveError('Your GitHub sign-in is no longer valid — sign in again to save (your changes are kept).');
+          setSaveError('Your session expired — you’ve been signed out. Sign in again to save (your changes are kept).');
         } else {
           setSaveError(`Save failed: ${msg}`);
         }
@@ -273,7 +269,7 @@ export default function App() {
         setSavePrompt(false); // close the confirm modal so the toast / red Save button are visible
       }
     })();
-  }, [ready, concepts, baseMap, deletedIds, gated, service, repo, identity, activePr, saveMessage, dispatch, expireSession]);
+  }, [ready, concepts, baseMap, deletedIds, gated, service, identity, activePr, saveMessage, dispatch, expireSession]);
 
   const dismissSaveError = useCallback(() => setSaveError(null), []);
 

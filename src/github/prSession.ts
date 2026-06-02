@@ -3,7 +3,7 @@
  * reload can tell whether that PR is still open: while it is, more Saves push onto the same `branch`
  * (the PR updates); once it's closed/merged the app resets and the next Save mints a fresh branch.
  */
-export type ActivePr = { number: number; url: string; branch: string; headOwner: string };
+export type ActivePr = { number: number; url: string; branch: string };
 
 const KEY = 'intent-editor.pr';
 

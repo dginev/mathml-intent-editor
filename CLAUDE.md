@@ -197,65 +197,76 @@ force-reinstall, do **not** symlink: Vite-following a symlink can load Temml twi
 
 ## GitHub integration (`src/github/`)
 
-**Users open their own PRs.** The browser holds the signed-in user's **GitHub access token** (classic
-OAuth App, scope `public_repo`) and does the writing itself — fork → branch → commit → PR — directly
-against `api.github.com` (CORS-enabled). Because the *user's* token pushes, the commit is authored by
-them and earns real **contribution-graph credit** (the motivation: green squares need the commit's
-author to also have forked/opened-the-PR — a bot can't satisfy that). The service exists only to hold the
-OAuth client secret for the code→token exchange (`github.com/login/oauth/access_token` has no CORS).
+The browser holds **no** GitHub token. It signs the user in (to get a `@handle`) and sends edits to the
+service; the **bot** (in `service/`) does all the writing. The old browser-push modules
+(`session.ts`/`submit.ts`/`repo.ts`/`octokitBackend.ts`) were removed — that logic now lives server-side
+in `service/src/github.js`.
 
-- `auth.ts` — sign-in client: `buildAuthorizeUrl` (OAuth App, `scope=public_repo`), `parseCallback` +
-  `parseCallbackError` (surfaces `?error=` returns), CSRF `state` helpers,
-  `exchangeCodeForIdentity(serviceUrl, code)` → `{ handle, token }` (POSTs `/auth`), and identity
-  storage (`save/load/clearIdentity`). `Identity = { handle, token }`. The token is long-lived (classic
-  OAuth), so there's **no JWT/expiry/renew** — a session ends via sign-out or a 401 from GitHub.
-- `userSubmit.ts` — the client-side writer (mirrors what the old bot did, now fork-aware):
-  `submitViaFork({owner, repo, baseBranch, filePath, handle, token, content, branch, title, description,
-  message})` → `ensureFork` (skipped when `handle === owner`; the maintainer pushes to the canonical repo
-  directly) → branch off the **upstream** base SHA → `PUT contents` → open/patch the PR → `{ prNumber,
-  prUrl, headOwner }`. Also `deleteBranch(...)` for the PR-close reset. Self-heals a stale (reused)
-  branch with no open PR by dropping it first. Unit-tested with a fetch stub.
-- `prSession.ts` — tracks the active PR (`localStorage`, `ActivePr = {number, url, branch, headOwner}`);
-  `newBranchName` mints `<handle>-<YYYYMMDD>-<first-concept>`; `fetchPullState()` polls the PR's
-  open/closed state via the **public** `api.github.com` (no token).
-- `submission.ts` — `buildSubmission(...)` assembles `{content, branch, title, description, message}`
-  from the working set (reused as-is by `App`).
-- `config.ts` — `repoConfigFromEnv()` and `serviceConfigFromEnv()` (`VITE_GH_CLIENT_ID`,
-  `VITE_GH_SERVICE`). Either null → graceful fallback (no repo → seed fixture; no service → local-only,
-  ungated editing). See `.env.example`.
+- `auth.ts` — sign-in client: `buildAuthorizeUrl` (GitHub App user OAuth, no scope), `parseCallback`,
+  CSRF `state` helpers, `exchangeCodeForIdentity(serviceUrl, code)` → `{ handle, jwt }` (POSTs
+  `/auth`), `renewIdentity(serviceUrl, jwt)` (POSTs `/renew` for the sliding session), and identity
+  storage (`save/load/clearIdentity`). The session JWT is a sliding **7-day** TTL: `loadIdentity` reads
+  the JWT `exp` and treats an expired token as signed-out (`isExpired`/`secondsUntilExpiry`); `App`
+  auto-signs-out at expiry and renews on a visit once the token has aged past its first day. Unit-tested.
+- `submitClient.ts` — `submitToService(serviceUrl, jwt, { content, message })` → POSTs `/submit`
+  (Bearer JWT) → `{ prNumber, prUrl }`; `resetSession(serviceUrl, jwt)` → POSTs `/reset` to delete the
+  caller's branch. Unit-tested.
+- `prSession.ts` — tracks the active PR (`localStorage`) and `fetchPullState()` polls its open/closed
+  state via the **public** `api.github.com` (plain `fetch`, no token — see [client GitHub access]).
+- `config.ts` — `repoConfigFromEnv()` (`VITE_GH_OWNER`/`REPO`/`BASE`/`FILE`) and
+  `serviceConfigFromEnv()` (`VITE_GH_CLIENT_ID`, `VITE_GH_SERVICE`). Either returns null → graceful
+  fallback (no repo → seed fixture; no service → local-only, ungated editing). See `.env.example`.
+- `src/data/serialize.ts` — concepts → `open.yml` (the content sent to `/submit`).
 
-`App` flow: **sign in** (`/auth` → store `{handle, token}`) gates editing when a service is configured.
-**Unique branch per PR:** reused while the PR is open (each Save = a new commit that updates it), a fresh
-name once it closed/merged. The data load reconciles against the user's branch **in their fork**
-(`loadDictionary({branch, branchOwner})`; `branchOwner = headOwner`, or `owner` for the maintainer).
+`App` flow: **sign in** (`/auth` → store `{handle, jwt}`) gates editing when a service is configured;
+**Unique branch per PR.** The client picks a unique working branch `<handle>-<YYYYMMDD>-<first-concept>`
+(`newBranchName` in `prSession.ts`), e.g. `dginev-20260531-additive-inverse`, and stores it with the
+active PR (`ActivePr.branch`). **Save** → `submitToService({…, branch})`: while the PR is open the SAME
+branch is reused, so each Save is a new commit that updates the open PR; once it closed/merged (or none
+exists) a fresh branch name is minted and a new PR opened. The data load reconciles against the active
+branch (`loadDictionary({branch})` reads its `open.yml`).
 
-**Session reset on PR close.** `App` polls the active PR (mount + window focus); when `closed` it
-client-side `deleteBranch`es the fork branch, clears the edit cache, and reloads from `main` — so the
-next edit starts a fresh branch with a minimal diff.
+**Session reset on PR close.** `App` tracks the active PR and, on mount + window focus, polls its state
+(`fetchPullState`); if it's `closed` (merged counts), it calls `/reset` with the branch (bot deletes it),
+clears the local edit cache, and reloads from `main` — so the next edit starts a fresh branch with a
+minimal diff. `/submit` also self-heals: if the (reused) branch has no open PR it drops the stale branch
+before committing (lazy cleanup if `/reset` was missed).
 
-The service is in **`service/`** (Fastify, deployed on `latexml.rs` behind Caddy at
-`https://intent-api.latexml.rs`) — now just `POST /auth` `{code}` → `{handle, token}` + `/health`. See
-`service/README.md`.
+The service itself is in **`service/`** (Fastify, deployed on `latexml.rs` behind Caddy at
+`https://intent-api.latexml.rs`) — see `service/README.md`.
 
-### Architecture (confirmed with the user)
+### Architecture (confirmed with the user — target design)
 
-- **Users open their own PRs from their own forks**, with their own token — for GitHub contribution
-  credit (a bot can't grant green squares). The maintainer (`handle === owner`) skips the fork and pushes
-  to the canonical repo directly. PR **title** (`add: …; edit: …; by @handle`) + **Markdown body** are
-  auto-generated from the change set in the "Describe your changes" Save modal (`pendingChanges.ts`).
-- **Backend = a thin OAuth-exchange microservice** on the `latexml.rs` VM behind Caddy (CORS for the
-  Pages origin). One endpoint: `/auth` (OAuth `code` → user token + handle). No JWT, no bot, no Git ops.
-- **All GitHub writes are client-side** over `api.github.com` (`userSubmit.ts`): verified that
-  `api.github.com` serves `ACAO: *` and allows the authenticated `POST`/`PUT`/`DELETE` preflight from a
-  browser origin. Reads stay backend-free over `raw.githubusercontent.com` (base from `owner`, branch
-  from the fork `headOwner`), with the same **three-way per-concept reconcile** (base ↔ fork branch ↔
-  local cache).
-- **Data repo = public `dginev/mathml-intent-open`**, single `open.yml` (fetched whole, rewritten whole).
-- **TeX round-trip:** `Concept.tex` ↔ `tex:` in `open.yml` (re-edits reopen the source).
+The earlier "user opens the PR with their own token" model was replaced. The agreed design:
+
+- **Identity is a prerequisite to edit.** Sign-in resolves the contributor's GitHub `@handle` before
+  any editing is possible. Identity is used for attribution, *not* for pushing.
+- **Bot opens the PRs via a single GitHub App.** One GitHub App does both: user-to-server OAuth (to
+  read the `@handle`) and an installation token (to commit as our controlled account). The PR **title**
+  (`add: …; edit: …; by @handle`) and **Markdown description** are auto-generated client-side from the
+  change set in the "Describe your changes" Save modal (`prTitle`/`markdownChangeSummary` in
+  `pendingChanges.ts`) and sent to `/submit`; the bot appends a "Proposed by @handle" attribution footer
+  to the body (bot is the commit author).
+- **Backend = a Node/Fastify microservice on the `latexml.rs` VM**, behind the VM's existing **Caddy**
+  (auto-HTTPS + CORS for the Pages origin). Stateless **JWT** sessions (no session store), a sliding
+  **7-day** TTL. Endpoints: `/auth` (OAuth code → verified handle → JWT), `/renew` (verify a valid JWT →
+  re-issue a fresh-TTL one), `/reset` (verify JWT → bot deletes `intent/<handle>`),
+  and `/submit` (verify JWT → bot commits to
+  `intent/<handle>` → ensure PR). **Deployed and verified** at `https://intent-api.latexml.rs`.
+- **Reads are backend-free.** The client fetches `open.yml` from `raw.githubusercontent.com` for both
+  `main` (base) and the user's `intent/<handle>` branch (raw serves `ACAO: *`, so no CORS issue), plus
+  a `localStorage` cache of the last save (covers raw's ~5-min CDN lag). On load it does a **three-way,
+  per-concept reconcile** (base ↔ branch ↔ local) over the slug-keyed map — same-slug changes on both
+  sides surface as conflicts.
+- **Data repo = public `dginev/mathml-intent-open`**, **single `open.yml`** (fetched whole, rendered
+  lazily, rewritten whole). Revisit splitting if conflicts become real.
+- **TeX round-trip: store both, MathML canonical.** `Concept.tex` holds the primary notation's source;
+  it is **written to `open.yml` as `tex:`** (when present) and read back, so re-edits reopen it. Seed
+  entries lack `tex` and re-author from blank.
 - **Hosting: app on GitHub Pages** (Actions deploy; `BASE_PATH=/<repo>/`).
 
-**Status:** the replacement is built and unit/e2e-green (the old bot/JWT/`submit`/`reset`/`renew`
-machinery is gone). **Remaining (external):** create a classic **OAuth App** (`public_repo`), set its
-client id in `.env.production` (`VITE_GH_CLIENT_ID`) + its secret on the service, redeploy the slimmed
-service, retire the old GitHub App, and do a live test with a *second* account — sign in → Save → PR
-from their account → merge → confirm a green square on their contribution graph.
+**Status:** built and wired end-to-end — raw-read + three-way reconcile data layer, the Fastify service
+(deployed on `latexml.rs`), the identity edit-gate, sign-in → `/auth`, and Save → `/submit`. The
+browser-push modules were removed. **Remaining:** the GitHub Pages deploy workflow (set the
+`VITE_GH_*` env at build), and an end-to-end live test of a real sign-in + PR. The three-way reconcile
+becomes fully exercised once users have `intent/<handle>` branches.

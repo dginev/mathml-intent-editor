@@ -12,8 +12,6 @@ export type LoadArgs = {
   filePath: string;
   /** The user's active PR branch; when set, its `open.yml` is read and reconciled as "ours". */
   branch?: string | null;
-  /** The repo the branch lives in — the user's fork (`<handle>`), or `owner` for the maintainer. */
-  branchOwner?: string | null;
   /** Local edit cache (the user's in-progress changes) to overlay and reconcile. */
   edits?: EditCache;
   fetchImpl?: typeof fetch;
@@ -35,14 +33,13 @@ const toMap = (concepts: Concept[]): ConceptMap =>
 export async function loadDictionary(
   args: LoadArgs,
 ): Promise<{ concepts: Concept[]; conflicts: string[]; base: Concept[] }> {
-  const { owner, repo, baseBranch, filePath, branch: branchName, branchOwner, edits = {}, fetchImpl } = args;
+  const { owner, repo, baseBranch, filePath, branch: branchName, edits = {}, fetchImpl } = args;
 
   const base = (await fetchDictionary(rawUrl(owner, repo, baseBranch, filePath), fetchImpl)) ?? [];
   const baseMap = toMap(base);
 
-  // The branch lives in the user's fork (`branchOwner`), not the canonical repo; the base stays canonical.
   const branch = branchName
-    ? ((await fetchDictionary(rawUrl(branchOwner ?? owner, repo, branchName, filePath), fetchImpl)) ?? null)
+    ? ((await fetchDictionary(rawUrl(owner, repo, branchName, filePath), fetchImpl)) ?? null)
     : null;
 
   // The GitHub working point the user's session forks from — their branch if it exists, else main.
