@@ -268,8 +268,17 @@ The earlier "user opens the PR with their own token" model was replaced. The agr
   entries lack `tex` and re-author from blank.
 - **Hosting: app on GitHub Pages** (Actions deploy; `BASE_PATH=/<repo>/`).
 
-**Status:** built and wired end-to-end — raw-read + three-way reconcile data layer, the Fastify service
-(deployed on `latexml.rs`), the identity edit-gate, sign-in → `/auth`, and Save → `/submit`. The
-browser-push modules were removed. **Remaining:** the GitHub Pages deploy workflow (set the
-`VITE_GH_*` env at build), and an end-to-end live test of a real sign-in + PR. The three-way reconcile
-becomes fully exercised once users have `intent/<handle>` branches.
+**Status:** deployed end-to-end — the bot frontend (GitHub Pages) + the OAuth/PR service (`latexml.rs`),
+sign-in → `/auth`, Save → `/submit`, with commits **authored as the contributor**. The browser holds no
+push token; the contributor's GitHub-App OAuth grants no repo scope (identity-only consent — the bot's
+write access comes from the maintainer's installation). **Remaining (external):** make the GitHub App
+**public** ("Any account") so non-owner contributors can authorize at all — the round-1 404 fix — then a
+live two-account test.
+
+> **History / open question.** A client-side user-PR variant (the browser's own `public_repo` token
+> forks + commits + opens the PR for genuine contribution-graph credit) was built and then **reverted**:
+> it needed a broad `public_repo` consent *and* an automatic fork GitHub Apps can't reliably do, while a
+> manual fork was unacceptable. We chose the narrow bot model (identity-only consent, authorship-display
+> credit). Being empirically verified (see git history / the `contrib-credit-test` probe): whether a
+> bot-authored commit earns an *unaffiliated* contributor green-square credit too, or only the
+> name-on-the-commit authorship display.
