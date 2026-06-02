@@ -230,11 +230,11 @@ export function NotationEditor({
   const notationBlocks = mode === 'tex' ? hasTex && (!engine || !texResult?.ok) : !!rawError;
   const canSave = slug.trim() !== '' && !notationBlocks && !extraBlocks;
 
-  // What the preview + validation use: the new notation, else the concept's existing first rendering.
-  // This is the RICH form (full Temml markup) — the web preview should look polished.
+  // The "Rendered" view uses this: the new notation rendered from TeX (else the concept's existing first
+  // rendering — the saved MathML). RICH form (full Temml markup), shown by the browser as math.
   const effectiveMathml = newMathml ?? concept.mathml[0] ?? null;
-  // What actually gets written to open.yml: the lean, minified form. Only the TeX-derived notation is
-  // minified; raw-MathML authoring is stored exactly as typed. Shown in the "MathML source" panel.
+  // The "MathML source" view shows the *stripped-down* form that gets stored: minify the TeX-derived
+  // notation (raw-MathML authoring is stored verbatim; an unchanged notation keeps the existing source).
   const storedMathml = useMemo(
     () => (mode === 'tex' && newMathml ? minifyMathml(newMathml) : effectiveMathml),
     [mode, newMathml, effectiveMathml],
@@ -523,7 +523,7 @@ export function NotationEditor({
             )}
           </div>
           <div className="preview-cell">
-            <span className="preview-label">MathML source (stored)</span>
+            <span className="preview-label">MathML source (simplified)</span>
             {storedMathml ? <MathMLSource markup={storedMathml} /> : <span className="hint">—</span>}
           </div>
         </div>

@@ -169,10 +169,15 @@ runs without a backend. So **don't remove the seed path** — the perf e2e depen
   tree (cosmetic classes/struts intact) for the preview + table; `{ ok, mathml, arity }`. See "MathML
   Intent rendering" and "Storage is minified, display is rich".
 - `src/render/minifyMathml.ts` — `minifyMathml(s)`: strips Temml's auxiliary tuning markup (`<mspace>`
-  struts, `class`/`style` hooks, single-child wrapper `<mrow>`s) to a minimal load-bearing tree, while
-  **preserving `intent`/`arg`** and semantic markers (e.g. the U+2061 function-apply operator) and
-  leaving load-bearing attrs like `mathvariant` alone. **Idempotent** (re-save never churns the diff;
-  the canonical round-trip stays stable). Applied only at the storage boundary (the editor's Save).
+  struts, `class`/`style` hooks, single-child wrapper `<mrow>`s, no-op `<mpadded lspace="0">` wraps) to a
+  minimal load-bearing tree. **Never loses an `intent`/`arg` annotation** — those are load-bearing. When
+  unwrapping a wrapper that carries one, it copies the annotation **down onto the single child**, but only
+  when safe (the wrapper has exactly one child and that child has neither `intent` nor `arg`); otherwise
+  the wrapper is kept (moving onto an annotated/multi-child inner could rebind or collide). So `\mathrm{Ab}`
+  → the canonical `<mi intent='…'>Ab</mi>`. Also leaves semantic markers (U+2061 function-apply) and
+  load-bearing attrs (`mathvariant`, `linethickness`, `stretchy`) alone. **Idempotent**
+  (re-save never churns the diff; the canonical round-trip stays stable). Applied only at the storage
+  boundary (the editor's Save).
 - `src/render/notationMarkup.ts` — `notationMarkup(concept, engine)`: the table's display rule —
   re-render the rich MathML from `concept.tex` when present (cached per `(slug, tex)` so virtualized
   cells don't recompute on scroll), else the stored `mathml` directly. Falls back to stored on render
@@ -184,10 +189,11 @@ runs without a backend. So **don't remove the seed path** — the perf e2e depen
   notations and freshly converted TeX. Markup is **sanitized** (`render/sanitizeMathml.ts`, DOMPurify
   MathML profile + `intent`/`arg`) before `innerHTML`, since raw-MathML notations are user-authored and
   shared via `open.yml` — otherwise stored XSS.
-- `src/components/NotationEditor.tsx` — inline TeX editor: loads Temml (async, via `temmlEngine`),
-  live-previews the **rich** annotated MathML; the "MathML source (stored)" panel shows the **minified**
-  form. Save emits the dictionary fragment, minified (`minifyMathml`) for TeX-authored notations, verbatim
-  for raw-MathML. Lazy-loaded from `App.tsx`.
+- `src/components/NotationEditor.tsx` — inline TeX editor: loads Temml (async, via `temmlEngine`). Two
+  side-by-side previews: **Rendered** shows the browser-rendered **rich** Temml MathML; **MathML source
+  (simplified)** shows the **stripped-down** (`minifyMathml`) form that gets stored. Neither preview
+  inner-scrolls — both grow vertically and the modal's own scroll navigates. Save emits the dictionary
+  fragment, minified for TeX-authored notations, verbatim for raw-MathML. Lazy-loaded from `App.tsx`.
 - `src/App.tsx` — shell: loads the seed, filter input, table; row click opens the editor; Save persists
   into local state (the PR-backing of saves is the next milestone).
 

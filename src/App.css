@@ -988,12 +988,12 @@
   font-style: italic;
 }
 
-/* Literal MathML source, lightly highlighted; intent/arg annotations emphasized. */
+/* Literal MathML source, lightly highlighted; intent/arg annotations emphasized. Shows its full height —
+   no inner scrollbar; the modal's own scroll navigates a long snippet. */
 .mathml-source {
   margin: 0;
   padding: 0.5rem;
-  max-height: 9rem;
-  overflow: auto;
+  overflow: visible;
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 0.72rem;
