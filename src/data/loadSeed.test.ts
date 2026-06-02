@@ -55,6 +55,9 @@ describe('loadSeed', () => {
     expect(concepts.filter((c) => c.slug === 'power')).toHaveLength(1);
     expect(concepts.some((c) => c.slug === 'power-2')).toBe(true);
     expect(concepts.some((c) => c.slug === 'power-3')).toBe(true);
+    // A clone's raw.concept tracks its suffixed slug, so it maps to itself in the change-classifier
+    // (otherwise every clone reads as a slug edit of the original and paints "changed").
+    expect(concepts.find((c) => c.slug === 'power-2')!.raw?.concept).toBe('power-2');
   });
 
   it('throws on a failed fetch', async () => {
