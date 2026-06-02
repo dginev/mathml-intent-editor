@@ -1,17 +1,29 @@
 /**
- * Client side of GitHub sign-in. The user authorizes our GitHub App; the redirect `code` is exchanged
- * by our service (`/auth`) for a verified `@handle` + a signed identity JWT. The JWT is the badge the
- * browser presents to `/submit`. (The GitHub App's client secret + bot key live only on the service.)
+ * Client side of GitHub sign-in. The user authorizes our **classic OAuth App** (scope `public_repo`);
+ * the redirect `code` is exchanged by our thin service (`/auth`) for the user's GitHub **access token**
+ * (the OAuth token endpoint has no CORS + needs the client secret, so the exchange is server-side). The
+ * browser then uses that token directly against `api.github.com` to fork + commit + open the PR — so the
+ * PR is genuinely the user's and the commit earns them contribution credit. The token is long-lived
+ * (classic OAuth tokens don't expire unless revoked), so there's no session/JWT/renew machinery.
  */
 const IDENTITY_KEY = 'intent-editor.identity';
 const STATE_KEY = 'intent-editor.oauth-state';
 const GITHUB_AUTHORIZE = 'https://github.com/login/oauth/authorize';
 
-export type Identity = { handle: string; jwt: string };
+/** `public_repo` — push to the user's fork of the (public) data repo + open the PR. */
+export const OAUTH_SCOPE = 'public_repo';
 
-/** GitHub App user-authorization URL. (Apps take no `scope` — permissions are fixed on the App.) */
-export function buildAuthorizeUrl(clientId: string, redirectUri: string, state: string): string {
-  const params = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, state });
+/** A signed-in user: their `@handle` and a GitHub access token scoped to `public_repo`. */
+export type Identity = { handle: string; token: string };
+
+/** Classic OAuth App authorization URL (takes a `scope`, unlike a GitHub App). */
+export function buildAuthorizeUrl(
+  clientId: string,
+  redirectUri: string,
+  state: string,
+  scope: string = OAUTH_SCOPE,
+): string {
+  const params = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, scope, state });
   return `${GITHUB_AUTHORIZE}?${params}`;
 }
 
@@ -25,8 +37,7 @@ export function parseCallback(search: string): { code: string; state: string } |
 
 /**
  * Parse an OAuth *failure* redirect (`?error=…&error_description=…`), or null when there's no error.
- * GitHub redirects back this way for catchable failures (e.g. the user cancels the authorization) — note
- * this does NOT cover a private GitHub App's bare 404, which never redirects back at all.
+ * GitHub redirects back this way for catchable failures (e.g. the user cancels the authorization).
  */
 export function parseCallbackError(search: string): { error: string; description?: string } | null {
   const params = new URLSearchParams(search);
@@ -50,7 +61,7 @@ export function consumeState(storage: Storage): string | null {
   return state;
 }
 
-/** Exchange the OAuth `code` at the service's `/auth` for a verified identity (handle + JWT). */
+/** Exchange the OAuth `code` at the service's `/auth` for the user's identity (handle + access token). */
 export async function exchangeCodeForIdentity(
   serviceUrl: string,
   code: string,
@@ -63,56 +74,12 @@ export async function exchangeCodeForIdentity(
   });
   if (!res.ok) throw new Error(`Sign-in failed: ${res.status}`);
   const data = (await res.json()) as Partial<Identity>;
-  if (!data.jwt || !data.handle) throw new Error('Auth response missing jwt/handle');
-  return { handle: data.handle, jwt: data.jwt };
-}
-
-/**
- * Sliding session: exchange a still-valid identity JWT for a fresh-TTL one at the service's `/renew`,
- * with no GitHub round-trip. Throws (incl. 401 if the token is already expired/invalid) on failure.
- */
-export async function renewIdentity(
-  serviceUrl: string,
-  jwt: string,
-  fetchImpl: typeof fetch = fetch,
-): Promise<Identity> {
-  const res = await fetchImpl(`${serviceUrl}/renew`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${jwt}` },
-  });
-  if (!res.ok) throw new Error(`Renew failed: ${res.status}`);
-  const data = (await res.json()) as Partial<Identity>;
-  if (!data.jwt || !data.handle) throw new Error('Renew response missing jwt/handle');
-  return { handle: data.handle, jwt: data.jwt };
+  if (!data.token || !data.handle) throw new Error('Auth response missing token/handle');
+  return { handle: data.handle, token: data.token };
 }
 
 export function saveIdentity(storage: Storage, identity: Identity): void {
   storage.setItem(IDENTITY_KEY, JSON.stringify(identity));
-}
-
-/** Decode a JWT's payload (NOT verified — we only read the non-secret `exp` claim client-side). */
-function decodeJwtPayload(token: string): { exp?: number } | null {
-  const part = token.split('.')[1];
-  if (!part) return null;
-  try {
-    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
-    const pad = b64.length % 4 ? '='.repeat(4 - (b64.length % 4)) : '';
-    return JSON.parse(atob(b64 + pad)) as { exp?: number };
-  } catch {
-    return null;
-  }
-}
-
-/** Seconds until the identity's JWT expires (negative = already expired); null if it carries no `exp`. */
-export function secondsUntilExpiry(identity: Identity, nowMs: number = Date.now()): number | null {
-  const exp = decodeJwtPayload(identity.jwt)?.exp;
-  return typeof exp === 'number' ? exp - Math.floor(nowMs / 1000) : null;
-}
-
-/** Whether the identity's session JWT has expired (the service signs a 12h TTL). */
-export function isExpired(identity: Identity, nowMs: number = Date.now()): boolean {
-  const secs = secondsUntilExpiry(identity, nowMs);
-  return secs != null && secs <= 0;
 }
 
 export function loadIdentity(storage: Storage): Identity | null {
@@ -120,12 +87,7 @@ export function loadIdentity(storage: Storage): Identity | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Identity;
-    if (!parsed || !parsed.handle || !parsed.jwt) return null;
-    if (isExpired(parsed)) {
-      storage.removeItem(IDENTITY_KEY); // a stale session shouldn't read as signed-in
-      return null;
-    }
-    return parsed;
+    return parsed && parsed.handle && parsed.token ? parsed : null;
   } catch {
     return null;
   }

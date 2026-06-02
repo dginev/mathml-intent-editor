@@ -11,16 +11,6 @@ vi.mock('./github/config', () => ({
 
 import App from './App';
 
-/** A JWT-shaped token whose `exp` is `days` out (so the renew-on-visit threshold isn't tripped). */
-const jwtExp = (days: number): string => {
-  const exp = Math.floor(Date.now() / 1000) + days * 86400;
-  const body = btoa(JSON.stringify({ handle: 'dginev', exp }))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-  return `h.${body}.s`;
-};
-
 const base: Concept = {
   slug: 'power',
   arity: 2,
@@ -33,17 +23,31 @@ const edited: Concept = { ...base, en: '$1 raised to $2' };
 const baseYaml = w3cYaml([{ concept: 'power', arity: 2, en: base.en, mathml: base.mathml }]);
 
 const textRes = (status: number, text: string) => ({ ok: status < 400, status, text: async () => text });
-const jsonRes = (obj: unknown) => ({ ok: true, status: 200, json: async () => obj, text: async () => JSON.stringify(obj) });
+const json = (status: number, obj: unknown) => ({ ok: status < 400, status, json: async () => obj, text: async () => JSON.stringify(obj) });
 
-const submitBodies: Array<Record<string, string>> = [];
+type Call = { method: string; url: string; body?: Record<string, string> };
+const ghCalls: Call[] = [];
+
+// Routes the client-side fork → branch → commit → PR sequence (api.github.com) + the raw reads.
 const fetchStub = vi.fn(async (url: string, init?: RequestInit) => {
   const u = String(url);
+  const method = init?.method ?? 'GET';
   if (u.includes('raw.githubusercontent.com')) return u.includes('/main/') ? textRes(200, baseYaml) : textRes(404, '');
-  if (u.includes('/submit')) {
-    submitBodies.push(JSON.parse(String(init?.body)));
-    return jsonRes({ prNumber: 1, prUrl: 'https://github.com/o/r/pull/1' });
+  if (u.includes('api.github.com')) {
+    ghCalls.push({ method, url: u, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+    if (method === 'POST' && u.endsWith('/repos/o/r/forks')) return json(202, {});
+    if (method === 'GET' && u.endsWith('/repos/dginev/r')) return json(200, {}); // fork ready
+    if (method === 'GET' && u.includes('/pulls?head=')) return json(200, []); // no open PR
+    if (method === 'DELETE' && u.includes('/git/refs/heads/')) return json(404, {});
+    if (method === 'GET' && u.endsWith('/repos/o/r/git/ref/heads/main')) return json(200, { object: { sha: 'S' } });
+    if (method === 'GET' && u.includes('/git/ref/heads/')) return json(404, {});
+    if (method === 'POST' && u.endsWith('/git/refs')) return json(201, {});
+    if (method === 'GET' && u.includes('/contents/open.yml')) return json(404, {});
+    if (method === 'PUT' && u.includes('/contents/open.yml')) return json(200, {});
+    if (method === 'POST' && u.endsWith('/repos/o/r/pulls')) return json(201, { number: 1, html_url: 'https://github.com/o/r/pull/1' });
+    if (method === 'GET' && u.includes('/repos/o/r/pulls/1')) return json(200, { state: 'open' }); // PR-state poll
+    throw new Error(`unrouted ${method} ${u}`);
   }
-  if (u.includes('/renew')) return jsonRes({ handle: 'dginev', jwt: jwtExp(7) });
   return textRes(404, '');
 });
 
@@ -56,16 +60,16 @@ describe('App (integration: save/branch flow)', () => {
   beforeEach(() => {
     localStorage.clear();
     window.history.replaceState(null, '', '/'); // isolate the ?filter= URL between tests
-    submitBodies.length = 0;
+    ghCalls.length = 0;
     fetchStub.mockClear();
     vi.stubGlobal('fetch', fetchStub);
     vi.stubGlobal('open', vi.fn());
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('submits the batch as a PR: builds the payload + a fresh unique branch, then tracks the PR', async () => {
-    // Signed in, with one pending edit restored from the cache → the session loads dirty.
-    localStorage.setItem('intent-editor.identity', JSON.stringify({ handle: 'dginev', jwt: jwtExp(7) }));
+  it('opens the user’s own PR: forks, commits the edit, and tracks the PR', async () => {
+    // Signed in (handle != repo owner → fork path), with one pending edit restored from the cache.
+    localStorage.setItem('intent-editor.identity', JSON.stringify({ handle: 'dginev', token: 'gho_x' }));
     localStorage.setItem(
       'intent-editor.edits',
       JSON.stringify({ 'power#2': { value: edited, baseAtEdit: base } }),
@@ -81,14 +85,20 @@ describe('App (integration: save/branch flow)', () => {
     await waitFor(() => expect(confirm).toBeEnabled());
     fireEvent.click(confirm);
 
-    await waitFor(() => expect(submitBodies).toHaveLength(1));
-    const body = submitBodies[0];
-    expect(body.branch).toMatch(/^dginev-\d{8}-power$/); // fresh unique branch (no open PR yet)
-    expect(body.title).toBe('edit: power; by @dginev');
-    expect(body.content).toContain('$1 raised to $2'); // the edited value, serialized
-
     await screen.findByText(/PR #1/); // PR tracked + status shown
-    expect(JSON.parse(localStorage.getItem('intent-editor.pr')!).number).toBe(1);
+
+    // The PR is opened on upstream with the fork as head; the commit carries the edited content.
+    const pr = ghCalls.find((c) => c.method === 'POST' && c.url.endsWith('/repos/o/r/pulls'));
+    expect(pr?.body?.title).toBe('edit: power; by @dginev');
+    expect(pr?.body?.head).toMatch(/^dginev:dginev-\d{8}-power$/);
+    const put = ghCalls.find((c) => c.method === 'PUT' && c.url.includes('/contents/open.yml'));
+    expect(put?.body?.branch).toMatch(/^dginev-\d{8}-power$/);
+    expect(atob(put?.body?.content ?? '')).toContain('$1 raised to $2'); // the edited value, serialized
+    expect(ghCalls.some((c) => c.url.endsWith('/repos/o/r/forks'))).toBe(true); // forked (handle != owner)
+
+    const storedPr = JSON.parse(localStorage.getItem('intent-editor.pr')!);
+    expect(storedPr.number).toBe(1);
+    expect(storedPr.headOwner).toBe('dginev'); // branch lives in the fork
   });
 
   it('hydrates the filter from ?filter= and syncs edits back into the URL', async () => {

@@ -3,110 +3,28 @@ import assert from 'node:assert/strict';
 import { createHandlers } from './handlers.js';
 
 // Fake dependencies — no network, no Fastify. We verify the route logic in isolation.
-function deps(overrides = {}) {
-  const calls = { submit: [], reset: [] };
-  const base = {
+function handlers(overrides = {}) {
+  return createHandlers({
     exchangeCode: async (code) => `user-token-for-${code}`,
     loginFor: async (token) => (token === 'user-token-for-CODE' ? 'dginev' : 'someone'),
-    signSession: (handle) => `jwt(${handle})`,
-    verifySession: (jwt) => {
-      const m = /^jwt\((.+)\)$/.exec(jwt);
-      if (!m) throw new Error('bad jwt');
-      return { handle: m[1] };
-    },
-    submit: async (arg) => {
-      calls.submit.push(arg);
-      return { prNumber: 7, prUrl: 'https://github.com/dginev/mathml-intent-open/pull/7' };
-    },
-    reset: async (arg) => {
-      calls.reset.push(arg);
-      return { deleted: true };
-    },
     ...overrides,
-  };
-  return { handlers: createHandlers(base), calls };
+  });
 }
 
-test('auth: exchanges code → handle → signed JWT', async () => {
-  const { handlers } = deps();
-  const out = await handlers.auth({ code: 'CODE' });
-  assert.equal(out.jwt, 'jwt(dginev)');
-  assert.equal(out.handle, 'dginev');
+test('auth: exchanges code → user token + handle (both returned to the browser)', async () => {
+  const out = await handlers().auth({ code: 'CODE' });
+  assert.deepEqual(out, { handle: 'dginev', token: 'user-token-for-CODE' });
 });
 
 test('auth: rejects a missing code with 400', async () => {
-  const { handlers } = deps();
-  await assert.rejects(() => handlers.auth({}), (e) => e.status === 400);
+  await assert.rejects(() => handlers().auth({}), (e) => e.status === 400);
 });
 
-test('submit: verifies the JWT and runs the bot submit (title/description/branch flow through)', async () => {
-  const { handlers, calls } = deps();
-  const out = await handlers.submit({
-    authorization: 'Bearer jwt(dginev)',
-    body: {
-      content: 'open: yaml',
-      message: 'edit power',
-      title: 'edit: power; by @dginev',
-      description: '### changes',
-      branch: 'dginev-20260531-power',
+test('auth: surfaces an exchange failure', async () => {
+  const h = handlers({
+    exchangeCode: async () => {
+      throw new Error('OAuth exchange failed: bad_verification_code');
     },
   });
-  assert.equal(out.prNumber, 7);
-  assert.deepEqual(calls.submit[0], {
-    handle: 'dginev',
-    content: 'open: yaml',
-    message: 'edit power',
-    title: 'edit: power; by @dginev',
-    description: '### changes',
-    branch: 'dginev-20260531-power',
-  });
-});
-
-test('submit: rejects a missing/invalid JWT with 401', async () => {
-  const { handlers } = deps();
-  await assert.rejects(
-    () => handlers.submit({ authorization: '', body: { content: 'x' } }),
-    (e) => e.status === 401,
-  );
-});
-
-test('submit: rejects missing content with 400', async () => {
-  const { handlers } = deps();
-  await assert.rejects(
-    () => handlers.submit({ authorization: 'Bearer jwt(dginev)', body: {} }),
-    (e) => e.status === 400,
-  );
-});
-
-test('submit: defaults a commit message mentioning the handle', async () => {
-  const { handlers, calls } = deps();
-  await handlers.submit({ authorization: 'Bearer jwt(dginev)', body: { content: 'x' } });
-  assert.match(calls.submit[0].message, /dginev/);
-});
-
-test('reset: verifies the JWT and deletes the caller’s branch', async () => {
-  const { handlers, calls } = deps();
-  const out = await handlers.reset({
-    authorization: 'Bearer jwt(dginev)',
-    body: { branch: 'dginev-20260531-power' },
-  });
-  assert.deepEqual(out, { deleted: true });
-  assert.deepEqual(calls.reset[0], { handle: 'dginev', branch: 'dginev-20260531-power' });
-});
-
-test('reset: rejects a missing/invalid JWT with 401', async () => {
-  const { handlers, calls } = deps();
-  await assert.rejects(() => handlers.reset({ authorization: '' }), (e) => e.status === 401);
-  assert.equal(calls.reset.length, 0);
-});
-
-test('renew: re-issues a fresh JWT for the same handle on a valid session', async () => {
-  const { handlers } = deps();
-  const out = await handlers.renew({ authorization: 'Bearer jwt(dginev)' });
-  assert.deepEqual(out, { jwt: 'jwt(dginev)', handle: 'dginev' });
-});
-
-test('renew: rejects a missing/invalid (e.g. expired) JWT with 401', async () => {
-  const { handlers } = deps();
-  await assert.rejects(() => handlers.renew({ authorization: 'Bearer nope' }), (e) => e.status === 401);
+  await assert.rejects(() => h.auth({ code: 'X' }), /OAuth exchange failed/);
 });

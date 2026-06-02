@@ -1,14 +1,14 @@
 /**
- * Route logic for the two endpoints, decoupled from Fastify and GitHub so it can be unit-tested with
- * fake `deps`. `server.js` wires these to real dependencies (`github.js`, `session.js`).
+ * Route logic for the single endpoint, decoupled from Fastify and GitHub so it can be unit-tested with
+ * fake `deps`. `server.js` wires this to the real `github.js`.
+ *
+ * The service exists only to hold the OAuth client secret: `github.com/login/oauth/access_token` has no
+ * CORS and needs the secret, so the browser can't do the code→token exchange itself. Everything else
+ * (fork, commit, open PR) the browser does directly against api.github.com with the returned token.
  *
  * deps: {
- *   exchangeCode(code) -> userToken          // GitHub App client_id + secret (server-side)
- *   loginFor(userToken) -> handle            // GET /user
- *   signSession(handle) -> jwt               // our identity JWT
- *   verifySession(jwt) -> { handle }         // throws if invalid
- *   submit({ handle, content, message }) -> { prNumber, prUrl }   // bot commit + PR
- *   reset({ handle }) -> { deleted }         // bot deletes the stale intent/<handle> branch
+ *   exchangeCode(code) -> userToken     // GitHub OAuth App client_id + secret (server-side)
+ *   loginFor(userToken) -> handle       // GET /user
  * }
  */
 export function createHandlers(deps) {
@@ -18,54 +18,13 @@ export function createHandlers(deps) {
     return e;
   };
 
-  /** Verify the Bearer JWT and run `fn(handle)`; a bad/expired token → 401. */
-  const withSession = (authorization, fn) => {
-    const jwt = (authorization || '').replace(/^Bearer\s+/i, '');
-    let handle;
-    try {
-      handle = deps.verifySession(jwt).handle;
-    } catch {
-      throw fail(401, 'invalid session');
-    }
-    return fn(handle);
-  };
-
   return {
-    /** POST /auth — finish OAuth, return an identity JWT (the user token is discarded). */
+    /** POST /auth — finish OAuth: exchange the code for the user's GitHub token + handle (both returned). */
     async auth(body) {
       if (!body || !body.code) throw fail(400, 'missing code');
-      const userToken = await deps.exchangeCode(body.code);
-      const handle = await deps.loginFor(userToken);
-      return { jwt: deps.signSession(handle), handle };
-    },
-
-    /** POST /submit — verify identity, then the bot commits + opens/updates the PR. */
-    async submit({ authorization, body }) {
-      return withSession(authorization, (handle) => {
-        if (!body || typeof body.content !== 'string') throw fail(400, 'missing content');
-        return deps.submit({
-          handle,
-          content: body.content,
-          message: body.message || `Update open.yml (proposed by @${handle})`,
-          title: body.title,
-          description: body.description,
-          branch: body.branch,
-        });
-      });
-    },
-
-    /** POST /reset — verify identity, then the bot deletes the caller's (closed-PR) working branch. */
-    async reset({ authorization, body }) {
-      return withSession(authorization, (handle) => deps.reset({ handle, branch: body?.branch }));
-    },
-
-    /**
-     * POST /renew — sliding session: verify the *current* (still-valid) JWT and re-issue a fresh-TTL
-     * one for the same handle. No GitHub round-trip; an expired token can't renew (verify throws → 401),
-     * so absences longer than the TTL still force a re-auth.
-     */
-    async renew({ authorization }) {
-      return withSession(authorization, (handle) => ({ jwt: deps.signSession(handle), handle }));
+      const token = await deps.exchangeCode(body.code);
+      const handle = await deps.loginFor(token);
+      return { handle, token };
     },
   };
 }

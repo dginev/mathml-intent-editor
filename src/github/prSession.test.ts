@@ -18,7 +18,7 @@ function memStorage(): Storage {
 describe('prSession storage', () => {
   it('round-trips and clears the active PR (with its branch)', () => {
     const s = memStorage();
-    const pr = { number: 12, url: 'https://github.com/o/r/pull/12', branch: 'dginev-20260531-power' };
+    const pr = { number: 12, url: 'https://github.com/o/r/pull/12', branch: 'dginev-20260531-power', headOwner: 'dginev' };
     expect(loadPr(s)).toBeNull();
     savePr(s, pr);
     expect(loadPr(s)).toEqual(pr);

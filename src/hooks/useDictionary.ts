@@ -152,9 +152,11 @@ export function useDictionary(
       try {
         if (repo) {
           const edits = loadEdits(localStorage);
+          const pr = loadPr(localStorage);
           const { concepts, conflicts, base } = await loadDictionary({
             ...repo,
-            branch: loadPr(localStorage)?.branch ?? null,
+            branch: pr?.branch ?? null,
+            branchOwner: pr?.headOwner ?? null, // the branch lives in the user's fork
             edits,
           });
           const bMap = new Map(base.map((c) => [conceptId(c), c]));
