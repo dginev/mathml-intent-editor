@@ -268,17 +268,34 @@ The earlier "user opens the PR with their own token" model was replaced. The agr
   entries lack `tex` and re-author from blank.
 - **Hosting: app on GitHub Pages** (Actions deploy; `BASE_PATH=/<repo>/`).
 
-**Status:** deployed end-to-end — the bot frontend (GitHub Pages) + the OAuth/PR service (`latexml.rs`),
-sign-in → `/auth`, Save → `/submit`, with commits **authored as the contributor**. The browser holds no
-push token; the contributor's GitHub-App OAuth grants no repo scope (identity-only consent — the bot's
-write access comes from the maintainer's installation). **Remaining (external):** make the GitHub App
-**public** ("Any account") so non-owner contributors can authorize at all — the round-1 404 fix — then a
-live two-account test.
+**Status:** deployed and verified end-to-end — the bot frontend (GitHub Pages) + the OAuth/PR service
+(`latexml.rs`), sign-in → `/auth`, Save → `/submit`, with commits **authored as the contributor**. The
+browser holds no push token; the contributor's GitHub-App OAuth grants no repo scope (identity-only
+consent — the bot's write access comes from the maintainer's installation). The GitHub App is **public**
+(round-1 404 cleared); a live smoke test confirmed sign-in → bot PR with the commit authored as the signer.
 
-> **History / open question.** A client-side user-PR variant (the browser's own `public_repo` token
-> forks + commits + opens the PR for genuine contribution-graph credit) was built and then **reverted**:
-> it needed a broad `public_repo` consent *and* an automatic fork GitHub Apps can't reliably do, while a
-> manual fork was unacceptable. We chose the narrow bot model (identity-only consent, authorship-display
-> credit). Being empirically verified (see git history / the `contrib-credit-test` probe): whether a
-> bot-authored commit earns an *unaffiliated* contributor green-square credit too, or only the
-> name-on-the-commit authorship display.
+> **History / open question.** A client-side user-PR variant (the browser's own `public_repo` token forks
+> + commits + opens the PR for genuine contribution-graph credit) was built and then **reverted**: it
+> needed a broad `public_repo` consent *and* an automatic fork GitHub Apps can't reliably do, while a
+> manual fork was unacceptable. We chose the narrow bot model (identity-only consent, authorship credit).
+> Left empirically open: whether a bot-authored commit earns an *unaffiliated* contributor green-square
+> credit too, or only the name-on-the-commit authorship display (the throwaway probe was deleted before
+> it resolved; re-test with a fresh repo + ~24h wait if it matters).
+
+## Backlog — deferred community feedback
+
+Ideas from the round-1 community feedback that were *not* implemented (the original meeting notes have
+since been removed from the repo). Captured here so they aren't lost:
+
+- **Wikidata-aware links.** Keep *both* Wikidata + Wikipedia links per concept; recognize/label each;
+  weigh Wikidata QIDs vs Wikipedia URLs as the canonical reference. (A dedicated `wikidata:` field is a
+  schema change needing a W3C decision; a Wikidata *URL* in `urls` needs none.)
+- **Translation prefill from Wikidata.** When authoring a non-English speech template, offer to prefill
+  from the concept's Wikidata label in that language (live Wikidata API, keyed off a WD link/QID).
+- **Data cleaning.** Normalize `arg` names; migrate Wikipedia → Wikidata links (Moritz to supply the
+  concept→Wikidata mapping). Eventually: add the MathML concept name into the Wikidata item itself.
+- **Ontology / classification** (Patrick). Tag concepts with subfields — MSC classes and/or Wikidata
+  categories — for browsing/filtering. A schema/convention question.
+- **Concept refinement** (Moritz). Wikidata-style split / merge / consistency tooling (Lean has similar).
+- **mardi4nfdi "profile pages for concepts."** A per-concept profile page; PRs proposed via this UI,
+  Moritz syncs.
