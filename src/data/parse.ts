@@ -1,6 +1,7 @@
 import { parse } from 'yaml';
 import ISO6391 from 'iso-639-1';
 import type { Concept, SpeechEntry } from '../types';
+import { uniq } from '../uniq';
 
 /** A raw `intents:` entry. Loose because the file is hand-authored; unknown keys are kept in `raw`. */
 type RawEntry = Record<string, unknown> & {
@@ -35,8 +36,9 @@ function normalize(e: RawEntry): Concept {
     arity: typeof e.arity === 'number' ? e.arity : undefined,
     property: typeof e.property === 'string' ? e.property : undefined,
     mathml: asArray(e.mathml),
-    links: asArray(e.urls),
-    alias: asArray(e.alias),
+    // `urls`/`alias` are sets — de-duplicate on read so the model (and the next Save's diff) is clean.
+    links: uniq(asArray(e.urls)),
+    alias: uniq(asArray(e.alias)),
     tex: typeof e.tex === 'string' ? e.tex : undefined,
     raw: e,
   };

@@ -7,6 +7,7 @@ import {
   isExpired,
   loadIdentity,
   parseCallback,
+  parseCallbackError,
   rememberState,
   renewIdentity,
   saveIdentity,
@@ -43,6 +44,16 @@ describe('parseCallback', () => {
   it('extracts code and state, or null', () => {
     expect(parseCallback('?code=abc&state=xyz')).toEqual({ code: 'abc', state: 'xyz' });
     expect(parseCallback('?error=access_denied')).toBeNull();
+  });
+});
+
+describe('parseCallbackError', () => {
+  it('extracts an OAuth error + description, or null when there is none', () => {
+    expect(parseCallbackError('?error=access_denied&error_description=The+user+denied')).toEqual({
+      error: 'access_denied',
+      description: 'The user denied',
+    });
+    expect(parseCallbackError('?code=abc&state=xyz')).toBeNull();
   });
 });
 

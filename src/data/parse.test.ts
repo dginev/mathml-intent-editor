@@ -41,6 +41,19 @@ describe('parseDictionary (W3C open.yml schema)', () => {
     expect(c.raw?.notationa).toBe('mo ′'); // a non-language key is not mistaken for speech
   });
 
+  it('de-duplicates urls and aliases into sets, preserving first-seen order', () => {
+    const yaml = w3cYaml([
+      {
+        concept: 'x',
+        urls: ['https://a', 'https://b', 'https://a'],
+        alias: ['ex', 'eks', 'ex'],
+      },
+    ]);
+    const [c] = parseDictionary(yaml);
+    expect(c.links).toEqual(['https://a', 'https://b']);
+    expect(c.alias).toEqual(['ex', 'eks']);
+  });
+
   it('reads the persisted tex source into Concept.tex', () => {
     const yaml = w3cYaml([{ concept: 'additive-inverse', arity: 1, tex: '-\\arg{x}{n}' }]);
     const [c] = parseDictionary(yaml);

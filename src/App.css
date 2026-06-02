@@ -879,6 +879,84 @@
   font-size: 0.8rem;
 }
 
+/* The naming guide is taller than the other popovers and lives on the top field row, so the default
+   "float above" would overflow the top of the modal. Drop it *below* the field and cap its height. */
+.legend-pop:has(.naming-guide) {
+  bottom: auto;
+  top: calc(100% + 6px);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+/* Naming guide: tighten the bulleted list inside the help popover. */
+.naming-guide p {
+  margin: 0 0 0.4rem;
+}
+.naming-guide ul {
+  margin: 0 0 0.4rem;
+  padding-left: 1.1rem;
+}
+.naming-guide li {
+  margin-bottom: 0.2rem;
+}
+
+/* "Related concepts already in the list" — a dedup aid shown while authoring a name. */
+.related {
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.related-head {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 0.4rem;
+}
+.related-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.related-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 0.78rem;
+}
+/* A name/alias collision is the strongest dedup signal — flag it. */
+.related-item.collision {
+  background: var(--diff-changed-bg);
+  border-color: var(--warning-text);
+}
+.related-slug {
+  font-family: var(--mono);
+}
+.related-arity,
+.related-area {
+  color: var(--text-muted);
+}
+.related-flag {
+  color: var(--danger-text);
+  font-weight: 600;
+}
+.related-more {
+  display: inline-block;
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 /* Rendered + literal-source previews side by side. */
 .previews {
   display: grid;

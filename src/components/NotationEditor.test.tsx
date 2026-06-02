@@ -9,7 +9,16 @@ vi.mock('../render/temmlEngine', async () => {
 });
 
 import { NotationEditor } from './NotationEditor';
+import { buildConceptIndex } from '../data/conceptIndex';
 import type { Concept } from '../types';
+
+const index = buildConceptIndex([
+  { slug: 'union', arity: 2, area: 'set theory', alias: ['cup'], mathml: [], links: [] },
+  { slug: 'disjoint-union', arity: 2, area: 'set theory', mathml: [], links: [], alias: [] },
+  { slug: 'power', arity: 2, alias: ['exponentiation'], mathml: [], links: [] },
+]);
+
+const blank: Concept = { slug: '', mathml: [], links: [], alias: [] };
 
 const base: Concept = {
   slug: 'additive-inverse',
@@ -259,5 +268,26 @@ describe('NotationEditor', () => {
     // base.en references $x, but base.mathml has no arg="x"
     render(<NotationEditor concept={base} onSave={vi.fn()} />);
     expect(screen.getByTestId('ref-warning')).toHaveTextContent('$x');
+  });
+
+  it('shows concept-naming guidance via the info button', () => {
+    render(<NotationEditor concept={base} onSave={vi.fn()} />);
+    expect(screen.queryByTestId('naming-help')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Naming help'));
+    expect(screen.getByTestId('naming-help')).toBeInTheDocument();
+  });
+
+  it('lists related concepts already in the list when the name collides', () => {
+    render(<NotationEditor concept={blank} onSave={vi.fn()} index={index} />);
+    expect(screen.queryByTestId('related-concepts')).toBeNull(); // nothing typed yet
+    fireEvent.change(screen.getByTestId('slug-input'), { target: { value: 'union' } });
+    expect(screen.getByTestId('related-concepts')).toHaveTextContent('union');
+  });
+
+  it('warns when an alias already names another concept', () => {
+    render(<NotationEditor concept={{ ...blank, slug: 'newthing' }} onSave={vi.fn()} index={index} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add alias' }));
+    fireEvent.change(screen.getByLabelText('Alias'), { target: { value: 'cup' } });
+    expect(screen.getByTestId('alias-warning')).toHaveTextContent('union');
   });
 });

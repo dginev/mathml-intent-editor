@@ -6,6 +6,7 @@ import {
   exchangeCodeForIdentity,
   loadIdentity,
   parseCallback,
+  parseCallbackError,
   randomState,
   rememberState,
   renewIdentity,
@@ -45,20 +46,23 @@ export function useIdentity({
     cbs.current = { onSignInError, onSessionExpired };
   });
 
-  // Complete the OAuth redirect (?code=…&state=…): verify state, exchange via /auth, store identity.
+  // Complete the OAuth redirect: a success (?code=…&state=…) is exchanged via /auth for an identity; a
+  // failure (?error=…&error_description=…, e.g. the user cancelled) is surfaced via onSignInError. Both
+  // clean the URL and clear the "Signing in…" pending state through the shared catch/finally.
   useEffect(() => {
     if (!service) return;
+    const err = parseCallbackError(window.location.search);
     const cb = parseCallback(window.location.search);
-    if (!cb) return;
-    const cleanUrl = window.location.origin + window.location.pathname;
-    const valid = cb.state === consumeState(localStorage);
-    window.history.replaceState(null, '', cleanUrl);
-    void (valid
-      ? exchangeCodeForIdentity(service.serviceUrl, cb.code).then((id) => {
-          saveIdentity(localStorage, id);
-          setIdentity(id);
-        })
-      : Promise.reject(new Error('state mismatch'))
+    if (!err && !cb) return;
+    window.history.replaceState(null, '', window.location.origin + window.location.pathname);
+    void (err
+      ? Promise.reject(new Error(err.description || err.error))
+      : cb!.state === consumeState(localStorage)
+        ? exchangeCodeForIdentity(service.serviceUrl, cb!.code).then((id) => {
+            saveIdentity(localStorage, id);
+            setIdentity(id);
+          })
+        : Promise.reject(new Error('state mismatch'))
     )
       .catch((e) => cbs.current.onSignInError?.(`Sign-in failed: ${e instanceof Error ? e.message : String(e)}`))
       .finally(() => setAuthPending(false));

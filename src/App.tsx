@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clearEdits } from './data/editCache';
 import { conceptId } from './data/conceptId';
+import { buildConceptIndex } from './data/conceptIndex';
 import { conceptMatches, matchRank } from './data/conceptMatch';
 import { classifyChange, type ChangeKind } from './data/pendingChanges';
 import { buildSubmission } from './github/submission';
@@ -24,8 +25,11 @@ const NotationEditor = lazy(() =>
 const SESSION_EXPIRED =
   'Your session expired — you’ve been signed out. Sign in again to continue (your changes are kept).';
 
+/** Read the deep-link filter from the current URL (`?filter=…`). */
+const filterFromUrl = () => new URLSearchParams(window.location.search).get('filter') ?? '';
+
 export default function App() {
-  const [filter, setFilter] = useState('');
+  const [filter, setFilter] = useState(filterFromUrl); // hydrate from ?filter= so the view is shareable
   const [editing, setEditing] = useState<Concept | null>(null);
   const [creating, setCreating] = useState(false); // the open modal is for a brand-new concept
   const [saving, setSaving] = useState(false);
@@ -40,6 +44,17 @@ export default function App() {
   const saveDialogRef = useRef<HTMLDialogElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
   useGlobalFindShortcut(filterRef); // Ctrl/⌘+F focuses the (whole-dictionary) Filter
+
+  // Reflect the filter into the URL (`?filter=…`) so it's shareable/deep-linkable, preserving any other
+  // query params. replaceState (not push) so each keystroke doesn't pile up history entries.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if ((params.get('filter') ?? '') === filter) return; // already in sync (incl. the hydrated load)
+    if (filter) params.set('filter', filter);
+    else params.delete('filter');
+    const qs = params.toString();
+    window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash);
+  }, [filter]);
 
   // Drive the native modal dialog from `editing` (showModal centres + traps focus; close() on cancel).
   useEffect(() => {
@@ -72,7 +87,9 @@ export default function App() {
   const [submitState, setSubmitState] = useState<string | null>(null);
   const { identity, authPending, signIn, expireSession } = useIdentity({
     service,
-    onSignInError: setSubmitState,
+    // Sign-in failures (incl. OAuth `?error=` returns) reach the user via the Toast — the status line is
+    // hidden while signed out, which is exactly when these occur. Same channel as a session expiry.
+    onSignInError: setSaveError,
     onSessionExpired: () => setSaveError(SESSION_EXPIRED),
   });
 
@@ -273,6 +290,8 @@ export default function App() {
     : concepts.slice(0, loadedCount);
   // All concept names — the editor highlights an alias that names a known concept.
   const knownSlugs = useMemo(() => new Set(concepts.map((c) => c.slug)), [concepts]);
+  // Dictionary-wide indexes for the editor's authoring helpers (related concepts + alias warnings).
+  const conceptIndex = useMemo(() => buildConceptIndex(concepts), [concepts]);
 
   return (
     <div className="app">
@@ -401,6 +420,7 @@ export default function App() {
               onDelete={creating ? undefined : handleDelete} // nothing to delete for a brand-new row
               onCancel={closeModal}
               knownSlugs={knownSlugs}
+              index={conceptIndex}
             />
           </Suspense>
         )}

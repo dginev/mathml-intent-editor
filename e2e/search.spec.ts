@@ -16,6 +16,19 @@ test('Filter finds a concept far beyond the loaded prefix', async ({ page }) => 
   await expect(deep.first()).toBeVisible(); // full-dictionary search surfaces it
 });
 
+test('?filter= deep-links straight into a filtered view', async ({ page }) => {
+  // Visiting with the param pre-fills the Filter and shows the (deep) match without any typing.
+  await page.goto('/?filter=power-1000');
+  await page.getByTestId('concept-count').waitFor();
+
+  await expect(page.getByPlaceholder('Filter concepts…')).toHaveValue('power-1000');
+  await expect(page.locator('[data-slug="power-1000"]').first()).toBeVisible();
+
+  // Clearing the filter drops the param from the URL.
+  await page.getByPlaceholder('Filter concepts…').fill('');
+  await expect(page).not.toHaveURL(/filter=/);
+});
+
 test('Ctrl+F focuses the Filter input instead of the browser find', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('concept-count').waitFor();

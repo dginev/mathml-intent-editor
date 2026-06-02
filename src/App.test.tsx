@@ -55,6 +55,7 @@ describe('App (integration: save/branch flow)', () => {
   });
   beforeEach(() => {
     localStorage.clear();
+    window.history.replaceState(null, '', '/'); // isolate the ?filter= URL between tests
     submitBodies.length = 0;
     fetchStub.mockClear();
     vi.stubGlobal('fetch', fetchStub);
@@ -88,6 +89,18 @@ describe('App (integration: save/branch flow)', () => {
 
     await screen.findByText(/PR #1/); // PR tracked + status shown
     expect(JSON.parse(localStorage.getItem('intent-editor.pr')!).number).toBe(1);
+  });
+
+  it('hydrates the filter from ?filter= and syncs edits back into the URL', async () => {
+    window.history.replaceState(null, '', '/?filter=power');
+    render(<App />);
+
+    const input = (await screen.findByPlaceholderText('Filter concepts…')) as HTMLInputElement;
+    expect(input.value).toBe('power'); // hydrated from the URL
+    await screen.findByText(/match/); // count reflects a filtered view
+
+    fireEvent.change(input, { target: { value: '' } }); // clearing drops the param
+    await waitFor(() => expect(window.location.search).toBe(''));
   });
 
   it('gates editing behind sign-in when a service is configured', async () => {

@@ -5,6 +5,8 @@ import { loadTemml, type TemmlEngine } from '../render/temmlEngine';
 import { MathML } from './MathML';
 import { MathMLSource } from './MathMLSource';
 import { IconButton, InfoPopover, RowControls } from './ui';
+import { aliasWarnings, relatedConcepts, type ConceptIndex } from '../data/conceptIndex';
+import { uniq } from '../uniq';
 import type { Concept } from '../types';
 
 /** One editable speech template row: a stable id, an ISO 639-1 language code, the template, and edit state. */
@@ -53,6 +55,44 @@ function useRowList<T extends { id: number; editing: boolean }>(
     [blank],
   );
   return [rows, ops] as const;
+}
+
+/** Short guidance on how to name a concept, surfaced from the Concept field's ⓘ button. */
+function NamingGuide() {
+  return (
+    <div className="legend-note naming-guide" data-testid="naming-help">
+      <p>
+        Name a concept by its common <strong>English name</strong>, lowercase, with words joined by
+        hyphens — e.g. <code>additive-inverse</code>, <code>abelian-group</code>.
+      </p>
+      <ul>
+        <li>
+          Prefer the everyday name over the formal one: <code>power</code> not{' '}
+          <code>exponentiation</code>, <code>gcd</code> not <code>greatest-common-divisor</code>.
+        </li>
+        <li>
+          A name <em>and its arity together</em> identify a concept; the same name may recur at
+          different arities (<code>disjoint-union</code> at 1 and 2). Set arity to the argument count.
+        </li>
+        <li>
+          Speak each argument positionally with <code>$</code> (<code>$x</code>, <code>$1</code>); arg
+          names must start with a letter.
+        </li>
+        <li>Scan “Related concepts” below first, so you don’t add a duplicate.</li>
+      </ul>
+      <p>
+        See the{' '}
+        <a href="https://w3c.github.io/mathml-docs/concept-lists/" target="_blank" rel="noreferrer">
+          W3C concept lists
+        </a>{' '}
+        and the{' '}
+        <a href="https://w3c.github.io/mathml-docs/intent/" target="_blank" rel="noreferrer">
+          Intent spec
+        </a>
+        .
+      </p>
+    </div>
+  );
 }
 
 function MacroLegend() {
@@ -110,6 +150,7 @@ export function NotationEditor({
   onDelete,
   onCancel,
   knownSlugs = NO_SLUGS,
+  index,
 }: {
   concept: Concept;
   onSave: (updated: Concept) => void;
@@ -117,6 +158,8 @@ export function NotationEditor({
   onCancel?: () => void;
   /** All concept names in the dictionary — an alias highlights when it names a known concept. */
   knownSlugs?: ReadonlySet<string>;
+  /** Dictionary-wide index powering the "related concepts" overview + alias-collision warnings. */
+  index?: ConceptIndex;
 }) {
   const isNew = concept.slug === ''; // a brand-new row (opened via "Add entry") starts slug-less
   const [slug, setSlug] = useState(concept.slug);
@@ -203,6 +246,20 @@ export function NotationEditor({
     [speechRows],
   );
 
+  // Authoring helpers (only when the dictionary index is supplied): concepts related to what's being
+  // authored (dedup aid) and warnings about aliases that collide with other concepts. `concept.slug`
+  // (the row's original identity) is excluded so a concept never flags itself or its own aliases.
+  const typedAliases = useMemo(() => aliasRows.map((r) => r.value), [aliasRows]);
+  const related = useMemo(
+    () =>
+      index ? relatedConcepts(index, { slug, aliases: typedAliases, area }, concept.slug) : { items: [], total: 0 },
+    [index, slug, typedAliases, area, concept.slug],
+  );
+  const aliasWarns = useMemo(
+    () => (index ? aliasWarnings(index, concept.slug, typedAliases) : []),
+    [index, typedAliases, concept.slug],
+  );
+
   const buildUpdated = (): Concept => {
     // Primary rendering (TeX/raw editor) + the edited additional renderings.
     const primary = newMathml ?? concept.mathml[0] ?? null;
@@ -226,8 +283,9 @@ export function NotationEditor({
       arity: arity.trim() === '' || Number.isNaN(n) ? undefined : n,
       property: property.trim() || undefined,
       mathml,
-      links: linkRows.map((r) => r.value.trim()).filter(Boolean),
-      alias: aliasRows.map((r) => r.value.trim()).filter(Boolean),
+      // Links/aliases are sets — drop blanks and de-duplicate (first occurrence wins).
+      links: uniq(linkRows.map((r) => r.value.trim()).filter(Boolean)),
+      alias: uniq(aliasRows.map((r) => r.value.trim()).filter(Boolean)),
       // TeX kept only when it authored the notation; raw-MathML authoring clears it.
       tex: mode === 'tex' ? tex.trim() || undefined : undefined,
     };
@@ -238,10 +296,20 @@ export function NotationEditor({
       <h2>{isNew ? 'Add concept' : <>Edit concept: <code>{concept.slug}</code></>}</h2>
 
       <div className="fields">
-        <label className="field">
-          <span>Concept</span>
-          <input data-testid="slug-input" value={slug} onChange={(e) => setSlug(e.target.value)} />
-        </label>
+        <div className="field">
+          <span className="field-head">
+            Concept
+            <InfoPopover label="Naming help">
+              <NamingGuide />
+            </InfoPopover>
+          </span>
+          <input
+            data-testid="slug-input"
+            aria-label="Concept"
+            value={slug}
+            onChange={(e) => setSlug(e.target.value)}
+          />
+        </div>
         <label className="field">
           <span>Arity</span>
           <input type="number" min={0} value={arity} onChange={(e) => setArity(e.target.value)} />
@@ -267,6 +335,31 @@ export function NotationEditor({
           />
         </div>
       </div>
+
+      {related.items.length > 0 && (
+        <div className="related" data-testid="related-concepts">
+          <span className="related-head">Related concepts already in the list</span>
+          <ul className="related-list">
+            {related.items.map((r) => (
+              <li key={r.slug} className={`related-item ${r.kind}`}>
+                <code className="related-slug">{r.slug}</code>
+                {r.arities.length > 0 && (
+                  <span className="related-arity">arity {r.arities.join(', ')}</span>
+                )}
+                {r.area && <span className="related-area">{r.area}</span>}
+                {r.kind === 'collision' && (
+                  <span className="related-flag" title="A concept with this name or alias already exists">
+                    possible duplicate
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+          {related.total > related.items.length && (
+            <span className="related-more">+{related.total - related.items.length} more</span>
+          )}
+        </div>
+      )}
 
       {/* Speech is full-width and multilingual: one template per language (ISO 639-1 key). */}
       <div className="field">
@@ -563,6 +656,11 @@ export function NotationEditor({
             )}
             <IconButton className="add-alias" label="Add alias" icon="+" onClick={aliasOps.add} />
           </div>
+          {aliasWarns.length > 0 && (
+            <p className="warn" role="status" data-testid="alias-warning">
+              {aliasWarns.join('; ')}
+            </p>
+          )}
         </div>
       </div>
 

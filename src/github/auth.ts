@@ -23,6 +23,18 @@ export function parseCallback(search: string): { code: string; state: string } |
   return code && state ? { code, state } : null;
 }
 
+/**
+ * Parse an OAuth *failure* redirect (`?error=…&error_description=…`), or null when there's no error.
+ * GitHub redirects back this way for catchable failures (e.g. the user cancels the authorization) — note
+ * this does NOT cover a private GitHub App's bare 404, which never redirects back at all.
+ */
+export function parseCallbackError(search: string): { error: string; description?: string } | null {
+  const params = new URLSearchParams(search);
+  const error = params.get('error');
+  if (!error) return null;
+  return { error, description: params.get('error_description') ?? undefined };
+}
+
 export function randomState(): string {
   return crypto.randomUUID();
 }
