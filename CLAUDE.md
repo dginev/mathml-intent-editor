@@ -153,7 +153,10 @@ runs without a backend. So **don't remove the seed path** — the perf e2e depen
   the virtualized rows).
 - `src/components/ConceptTable.tsx` — headless TanStack Table + TanStack Virtual. DOM row windowing
   with absolute-positioned rows; it renders exactly the `data` it's given (filtering happens upstream in
-  `App`). Notation column renders the stored MathML via `<MathML>`.
+  `App`). The Notation column shows the **rich** render: `render/notationMarkup.ts` re-renders from the
+  concept's `tex` via Temml when present (the stored `mathml` is the *minified* form — see "Storage is
+  minified, display is rich"), else it renders the stored `mathml` directly. Temml is lazy-loaded only
+  when some visible row has `tex` (the seed/e2e data has none, so the perf path never pulls it).
 - `src/render/temmlEngine.ts` — loads Temml. **Must stay this way:** it imports the prebuilt
   `temml/dist/temml.mjs?url` and `import()`s that URL so Vite emits Temml **untransformed**. Temml
   registers its ~80 commands by mutating a module-level `const _functions = {}` at import time; when
@@ -161,9 +164,19 @@ runs without a backend. So **don't remove the seed path** — the perf e2e depen
   empty at runtime (every command → "Unsupported function name", *non-deterministically* per build).
   Loading it as an asset sidesteps the bundler. `loadTemml()` is async + cached.
 - `src/render/intent.ts` — `texToIntent(temml, tex, concept)`: TeX → **annotated dictionary fragment**
-  (takes the engine so it stays pure/sync/node-testable). Unwraps `<math>`, defaults the root `intent`
-  to the concept (auto-composed from `\arg` names when no explicit `\intent`), strips cosmetic classes.
-  Returns `{ ok, mathml, arity }`. See "MathML Intent rendering".
+  (takes the engine so it stays pure/sync/node-testable). Unwraps `<math>` and defaults the root `intent`
+  to the concept (auto-composed from `\arg` names when no explicit `\intent`). Returns the **rich** Temml
+  tree (cosmetic classes/struts intact) for the preview + table; `{ ok, mathml, arity }`. See "MathML
+  Intent rendering" and "Storage is minified, display is rich".
+- `src/render/minifyMathml.ts` — `minifyMathml(s)`: strips Temml's auxiliary tuning markup (`<mspace>`
+  struts, `class`/`style` hooks, single-child wrapper `<mrow>`s) to a minimal load-bearing tree, while
+  **preserving `intent`/`arg`** and semantic markers (e.g. the U+2061 function-apply operator) and
+  leaving load-bearing attrs like `mathvariant` alone. **Idempotent** (re-save never churns the diff;
+  the canonical round-trip stays stable). Applied only at the storage boundary (the editor's Save).
+- `src/render/notationMarkup.ts` — `notationMarkup(concept, engine)`: the table's display rule —
+  re-render the rich MathML from `concept.tex` when present (cached per `(slug, tex)` so virtualized
+  cells don't recompute on scroll), else the stored `mathml` directly. Falls back to stored on render
+  failure or before the engine loads.
 - `src/render/texToMathml.ts` — older raw `texToMathML(tex)` seam (`<math>`-wrapped). Not on the app
   path anymore (only its own node test uses it); kept for reference.
 - `src/components/MathML.tsx` — renders a MathML string natively; wraps bare fragments in `<math>`
@@ -172,7 +185,9 @@ runs without a backend. So **don't remove the seed path** — the perf e2e depen
   MathML profile + `intent`/`arg`) before `innerHTML`, since raw-MathML notations are user-authored and
   shared via `open.yml` — otherwise stored XSS.
 - `src/components/NotationEditor.tsx` — inline TeX editor: loads Temml (async, via `temmlEngine`),
-  live-previews the annotated MathML, Save emits the dictionary fragment. Lazy-loaded from `App.tsx`.
+  live-previews the **rich** annotated MathML; the "MathML source (stored)" panel shows the **minified**
+  form. Save emits the dictionary fragment, minified (`minifyMathml`) for TeX-authored notations, verbatim
+  for raw-MathML. Lazy-loaded from `App.tsx`.
 - `src/App.tsx` — shell: loads the seed, filter input, table; row click opens the editor; Save persists
   into local state (the PR-backing of saves is the next milestone).
 
@@ -193,7 +208,28 @@ later-phase concern — skeleton/wiring first.) The fork repurposes `\arg` (was
 the complex-argument operator) — use `\operatorname{arg}` for that. Rebuild the fork after editing it:
 `cd ~/git/Temml && npx rollup -c utils/rollupConfig.mjs && node utils/insertPlugins.js && node utils/copyfiles.js`
 then in the app `npm install temml@file:../Temml` (npm caches `file:` deps — bump the fork version or
-force-reinstall, do **not** symlink: Vite-following a symlink can load Temml twice).
+force-reinstall, do **not** symlink: Vite-following a symlink can load Temml twice). *(The app now
+consumes the fork as a git branch — `"temml": "github:dginev/Temml#intent-arg-annotations"` — not a
+local `file:` checkout.)*
+
+### Storage is minified, display is rich
+
+Temml emits presentation **tuning** that's right for typesetting but is noise in a *synthetic* dictionary
+sample (spacing struts, `tml-*` classes, wrapper `<mrow>`s). Decision (per @dginev): keep the polished
+render **on screen** but write a **minimal** tree to `open.yml`. Rather than patch the fork to emit lean
+MathML, we do it **app-side** so the engine stays stock and display keeps the cosmetics:
+
+- **`texToIntent` → rich** (no stripping); feeds the editor preview and the table.
+- **`minifyMathml`** runs at the **storage boundary only** (the editor's Save, `buildUpdated`), not in
+  `serialize.ts` — so untouched entries round-trip verbatim (no whole-file reformat) and a single edit
+  stays a minimal diff. The model's `mathml` is therefore the **minified** form, which is what
+  `reconcile.ts::contentKey` compares — so a saved→reloaded entry reads as unchanged (no spurious dirty).
+- **Display re-renders rich from `tex`** (`notationMarkup`): `tex` present → rich Temml render; no `tex`
+  (seed/legacy/raw-authored) → the stored `mathml` directly. So after a save+reload, a `tex`-bearing cell
+  is still pretty even though the file holds the lean form.
+
+(Considered but not taken: a `minimal`/`intent` flag inside the Temml fork — rejected because it would
+minify the display too and add fork-maintenance burden for no gain over the app-side pass.)
 
 ## GitHub integration (`src/github/`)
 

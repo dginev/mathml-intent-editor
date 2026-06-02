@@ -6,9 +6,12 @@ import type { TemmlEngine } from './temmlEngine';
  * Annotation is done natively by our Temml fork (see ../../../Temml): the curator writes
  *   - `\arg{name}{tex}` — sets `arg="name"` (official `\MathMLarg` / `\MMLarg` are aliases)
  *   - `\intent{expr}{tex}` — sets `intent="expr"` (official `\MathMLintent` / `\MMLintent` aliases)
- * so there is no DOM attribute-injection here — we only unwrap `<math>`, default the root `intent`
- * to the concept slug when the author didn't supply one, and strip Temml's cosmetic classes so the
- * output matches the seed's clean MathML.
+ * so there is no DOM attribute-injection here — we only unwrap `<math>` and default the root `intent`
+ * to the concept slug when the author didn't supply one.
+ *
+ * The result is the **rich** Temml tree (cosmetic classes, spacing struts and all): this feeds the web
+ * preview and the table's notation cell, where we *want* the polished rendering. The lean form that gets
+ * written to `open.yml` is produced separately by {@link minifyMathml} at the storage boundary.
  */
 export type IntentResult = { ok: true; mathml: string; arity: number } | { ok: false; error: string };
 
@@ -18,11 +21,6 @@ export type IntentResult = { ok: true; mathml: string; arity: number } | { ok: f
  * `$1`). A trailing `.`/`-` is left out — it's almost always sentence punctuation, not part of the name.
  */
 const SPEECH_REF = /\$([A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?)/g;
-
-function stripClasses(el: Element): void {
-  el.removeAttribute('class');
-  for (const c of Array.from(el.querySelectorAll('*'))) c.removeAttribute('class');
-}
 
 /** The fragment's root: the single child of `<math>`, or a fresh `<mrow>` wrapping several. */
 function rootOf(doc: Document, math: Element): Element {
@@ -104,6 +102,5 @@ export function texToIntent(temml: TemmlEngine, tex: string, concept: string): I
     root.setAttribute('intent', refs ? `${concept}(${refs})` : concept);
   }
 
-  stripClasses(root);
   return { ok: true, mathml: new XMLSerializer().serializeToString(root), arity: argNames.length };
 }

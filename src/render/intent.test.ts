@@ -71,10 +71,11 @@ describe('texToIntent', () => {
     }
   });
 
-  it('strips Temml cosmetic classes', () => {
+  it('keeps the rich Temml markup (cosmetic classes) for the web preview; minify strips it at storage', () => {
     const r = texToIntent(engine, 'x^2', 'power-example');
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.mathml).not.toContain('class=');
+    // The exponent carries a `tml-sml-pad` class — preserved here so the rendered preview looks polished.
+    if (r.ok) expect(r.mathml).toContain('class=');
   });
 
   it('returns an error result for invalid TeX', () => {

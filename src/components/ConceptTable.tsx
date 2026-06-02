@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createColumnHelper, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { Concept } from '../types';
@@ -6,25 +6,34 @@ import { conceptId } from '../data/conceptId';
 import type { ChangeKind } from '../data/pendingChanges';
 import { linkDomain } from './linkDomain';
 import { MathML } from './MathML';
+import { notationMarkup } from '../render/notationMarkup';
+import { loadTemml, type TemmlEngine } from '../render/temmlEngine';
 
 const columnHelper = createColumnHelper<Concept>();
 
-/** Per-row callbacks the display columns reach through TanStack's table `meta`. */
+/** Per-row callbacks + the (lazily loaded) Temml engine the display columns reach through TanStack's `meta`. */
 type TableMeta = {
   onEdit?: (c: Concept) => void;
   onDelete?: (c: Concept) => void;
   changeKind?: (c: Concept) => ChangeKind | null;
+  /** Loaded once any visible row has `tex`; lets the Notation cell re-render the rich form (else stored). */
+  engine?: TemmlEngine | null;
 };
 
 const columns = [
   columnHelper.accessor('slug', { header: 'Concept', size: 240 }),
   columnHelper.accessor('en', { header: 'Speech (en)', size: 280 }),
   columnHelper.accessor('area', { header: 'Area', size: 180 }),
-  columnHelper.accessor((c) => c.mathml[0] ?? '', {
+  columnHelper.display({
     id: 'notation',
     header: 'Notation',
     size: 320,
-    cell: (info) => <MathML markup={info.getValue()} className="mathml" />,
+    // Re-render the rich MathML from `tex` when present (else the stored, minified mathml). The engine
+    // rides in on `meta`; until it loads (or for tex-less rows) `notationMarkup` returns the stored form.
+    cell: ({ row, table }) => {
+      const meta = table.options.meta as TableMeta | undefined;
+      return <MathML markup={notationMarkup(row.original, meta?.engine ?? null)} className="mathml" />;
+    },
   }),
   columnHelper.accessor((c) => c.links, {
     id: 'links',
@@ -118,11 +127,24 @@ export function ConceptTable({
   /** Buttons rendered as a phantom rightmost column in the sticky header (Add entry + batch Save). */
   headerActions?: ReactNode;
 }) {
+  // Lazily load Temml only when some row actually has `tex` to re-render (the seed/e2e data has none, so
+  // the perf path never pulls Temml). Cells render the stored mathml until the engine resolves.
+  const [engine, setEngine] = useState<TemmlEngine | null>(null);
+  const needsEngine = useMemo(() => data.some((c) => c.tex != null && c.tex.trim() !== ''), [data]);
+  useEffect(() => {
+    if (!needsEngine || engine) return;
+    let live = true;
+    loadTemml().then((e) => live && setEngine(e));
+    return () => {
+      live = false;
+    };
+  }, [needsEngine, engine]);
+
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    meta: { onEdit, onDelete, changeKind },
+    meta: { onEdit, onDelete, changeKind, engine },
   });
 
   const rows = table.getRowModel().rows;

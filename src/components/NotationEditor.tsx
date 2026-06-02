@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import ISO6391 from 'iso-639-1';
 import { missingSpeechRefs, texToIntent, unusedArgRefs } from '../render/intent';
+import { minifyMathml } from '../render/minifyMathml';
 import { loadTemml, type TemmlEngine } from '../render/temmlEngine';
 import { MathML } from './MathML';
 import { MathMLSource } from './MathMLSource';
@@ -230,7 +231,14 @@ export function NotationEditor({
   const canSave = slug.trim() !== '' && !notationBlocks && !extraBlocks;
 
   // What the preview + validation use: the new notation, else the concept's existing first rendering.
+  // This is the RICH form (full Temml markup) — the web preview should look polished.
   const effectiveMathml = newMathml ?? concept.mathml[0] ?? null;
+  // What actually gets written to open.yml: the lean, minified form. Only the TeX-derived notation is
+  // minified; raw-MathML authoring is stored exactly as typed. Shown in the "MathML source" panel.
+  const storedMathml = useMemo(
+    () => (mode === 'tex' && newMathml ? minifyMathml(newMathml) : effectiveMathml),
+    [mode, newMathml, effectiveMathml],
+  );
   // Validation spans all languages: a `$ref` in any template, an `arg` referenced by none of them.
   const allSpeech = useMemo(() => speechRows.map((r) => r.text).join('\n'), [speechRows]);
   const missingRefs = useMemo(
@@ -261,8 +269,10 @@ export function NotationEditor({
   );
 
   const buildUpdated = (): Concept => {
-    // Primary rendering (TeX/raw editor) + the edited additional renderings.
-    const primary = newMathml ?? concept.mathml[0] ?? null;
+    // Primary rendering (TeX/raw editor) + the edited additional renderings. The TeX-derived notation is
+    // stored in its minified form (the web re-renders the rich version from `tex`); raw MathML is kept
+    // verbatim, and an unchanged notation keeps the concept's existing (already-stored) first rendering.
+    const primary = newMathml != null ? (mode === 'tex' ? minifyMathml(newMathml) : newMathml) : concept.mathml[0] ?? null;
     const extras = extraRows.map((r) => r.value.trim()).filter(Boolean);
     const mathml = primary != null ? [primary, ...extras] : extras;
     const n = Number(arity);
@@ -513,8 +523,8 @@ export function NotationEditor({
             )}
           </div>
           <div className="preview-cell">
-            <span className="preview-label">MathML source</span>
-            {effectiveMathml ? <MathMLSource markup={effectiveMathml} /> : <span className="hint">—</span>}
+            <span className="preview-label">MathML source (stored)</span>
+            {storedMathml ? <MathMLSource markup={storedMathml} /> : <span className="hint">—</span>}
           </div>
         </div>
       )}
