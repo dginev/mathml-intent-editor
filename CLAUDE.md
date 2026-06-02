@@ -239,14 +239,17 @@ The service itself is in **`service/`** (Fastify, deployed on `latexml.rs` behin
 
 The earlier "user opens the PR with their own token" model was replaced. The agreed design:
 
-- **Identity is a prerequisite to edit.** Sign-in resolves the contributor's GitHub `@handle` before
-  any editing is possible. Identity is used for attribution, *not* for pushing.
-- **Bot opens the PRs via a single GitHub App.** One GitHub App does both: user-to-server OAuth (to
-  read the `@handle`) and an installation token (to commit as our controlled account). The PR **title**
-  (`add: …; edit: …; by @handle`) and **Markdown description** are auto-generated client-side from the
-  change set in the "Describe your changes" Save modal (`prTitle`/`markdownChangeSummary` in
-  `pendingChanges.ts`) and sent to `/submit`; the bot appends a "Proposed by @handle" attribution footer
-  to the body (bot is the commit author).
+- **Identity is a prerequisite to edit.** Sign-in resolves the contributor's GitHub `@handle` (+ numeric
+  `id`) before any editing is possible. The contributor's OAuth grants **no repo scope** — the bot's
+  write access comes from the maintainer's installation, so the contributor's consent is identity-only.
+- **Bot opens the PRs via a single GitHub App, but commits are authored as the contributor.** One GitHub
+  App does both: user-to-server OAuth (to read the `@handle`+`id`) and an installation token (to push).
+  The commit **author** is set to the contributor (`<id>+<handle>@users.noreply.github.com`, carried in
+  the JWT) so their name+avatar appear on every commit and link to their profile (authorship credit; not
+  green-square contribution-graph credit, which GitHub gates behind a fork/PR/collaborator association
+  the bot can't create); the **committer** is the bot. The PR **title** (`add: …; edit: …; by @handle`)
+  and **Markdown body** are auto-generated client-side (`prTitle`/`markdownChangeSummary` in
+  `pendingChanges.ts`); the bot appends a "Proposed by @handle" footer.
 - **Backend = a Node/Fastify microservice on the `latexml.rs` VM**, behind the VM's existing **Caddy**
   (auto-HTTPS + CORS for the Pages origin). Stateless **JWT** sessions (no session store), a sliding
   **7-day** TTL. Endpoints: `/auth` (OAuth code → verified handle → JWT), `/renew` (verify a valid JWT →

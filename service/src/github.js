@@ -17,7 +17,7 @@ export async function exchangeCode(code, { clientId, clientSecret }) {
   return data.access_token;
 }
 
-/** Resolve the authenticated user's `@handle` from a user token. */
+/** Resolve the authenticated user's `@handle` + numeric id (for the no-reply commit-author email). */
 export async function loginFor(userToken) {
   const res = await fetch('https://api.github.com/user', {
     headers: { authorization: `Bearer ${userToken}`, accept: 'application/vnd.github+json', 'user-agent': UA },
@@ -25,7 +25,7 @@ export async function loginFor(userToken) {
   if (!res.ok) throw new Error(`User lookup failed: ${res.status}`);
   const data = await res.json();
   if (!data.login) throw new Error('No login on user response');
-  return data.login;
+  return { login: data.login, id: data.id };
 }
 
 /** Octokit authenticated as the GitHub App installation (the controlled bot account). */
@@ -123,9 +123,12 @@ async function deleteBranch(octokit, owner, repo, branch) {
  * base branch is open. If the branch has NO open PR (its previous PR was closed/merged), the stale
  * branch is dropped first so a fresh branch is cut off the current base — keeping the new PR's diff
  * minimal. An open PR is left in place and pushing onto it auto-updates it. Returns `{ prNumber, prUrl }`.
+ *
+ * The commit **author** is set to the contributor (`authorEmail` = their `…@users.noreply` address), so
+ * the commit shows their name + avatar and links to their profile; the **committer** stays the bot.
  */
 export function makeSubmit({ octokit, owner, repo, baseBranch, filePath }) {
-  return async function submit({ handle, content, message, title, description, branch: requested }) {
+  return async function submit({ handle, content, message, title, description, branch: requested, authorEmail }) {
     // The client picks a unique branch per PR (`<handle>-<date>-<concept>`); reuse it while its PR is
     // open (a new commit updates the PR), else cut it fresh off the base. Fall back to a per-handle name.
     const branch = requested || `intent/${handle}`;
@@ -139,6 +142,7 @@ export function makeSubmit({ octokit, owner, repo, baseBranch, filePath }) {
       content: Buffer.from(content, 'utf8').toString('base64'),
       branch,
       sha: await fileSha(octokit, owner, repo, filePath, branch),
+      ...(authorEmail ? { author: { name: handle, email: authorEmail } } : {}),
     });
     const pr = await ensurePullRequest(octokit, owner, repo, baseBranch, branch, handle, title, description);
     return { prNumber: pr.number, prUrl: pr.html_url };

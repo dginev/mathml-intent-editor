@@ -9,7 +9,8 @@ import jwt from 'jsonwebtoken';
 export function makeSession(secret, ttl = '7d') {
   if (!secret) throw new Error('JWT_SECRET is required');
   return {
-    signSession: (handle) => jwt.sign({ handle }, secret, { expiresIn: ttl }),
-    verifySession: (token) => jwt.verify(token, secret), // -> { handle, iat, exp }; throws if invalid
+    // Carry the numeric `id` too, so `/submit` can build the contributor's no-reply commit-author email.
+    signSession: ({ handle, id }) => jwt.sign({ handle, id }, secret, { expiresIn: ttl }),
+    verifySession: (token) => jwt.verify(token, secret), // -> { handle, id, iat, exp }; throws if invalid
   };
 }
