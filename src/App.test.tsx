@@ -52,6 +52,9 @@ describe('App (integration: save/branch flow)', () => {
     // jsdom's <dialog> may lack showModal/close; no-op polyfills keep App's dialog effects from throwing.
     HTMLDialogElement.prototype.showModal ||= function (this: HTMLDialogElement) { this.open = true; };
     HTMLDialogElement.prototype.close ||= function (this: HTMLDialogElement) { this.open = false; };
+    // jsdom does no layout: give elements a viewport-sized box so TanStack Virtual renders table rows.
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(600);
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(800);
   });
   beforeEach(() => {
     localStorage.clear();
@@ -100,6 +103,31 @@ describe('App (integration: save/branch flow)', () => {
     await screen.findByText(/match/); // count reflects a filtered view
 
     fireEvent.change(input, { target: { value: '' } }); // clearing drops the param
+    await waitFor(() => expect(window.location.search).toBe(''));
+  });
+
+  it('hydrates the speech language from ?lang= and shows that language column', async () => {
+    // A dictionary carrying a Bulgarian template alongside English.
+    const bgYaml = w3cYaml([
+      { concept: 'power', arity: 2, en: base.en, bg: 'степен', mathml: base.mathml },
+    ]);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        const u = String(url);
+        if (u.includes('raw.githubusercontent.com')) return u.includes('/main/') ? textRes(200, bgYaml) : textRes(404, '');
+        return textRes(404, '');
+      }),
+    );
+    window.history.replaceState(null, '', '/?lang=bg');
+    render(<App />);
+
+    const select = (await screen.findByRole('combobox', { name: 'Speech language' })) as HTMLSelectElement;
+    expect(select.value).toBe('bg'); // hydrated from the URL
+    await screen.findByText('степен'); // the bg template is shown in the Speech column
+
+    // Switching back to English drops the param from the URL (en is the default).
+    fireEvent.change(select, { target: { value: 'en' } });
     await waitFor(() => expect(window.location.search).toBe(''));
   });
 

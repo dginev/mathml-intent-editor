@@ -1095,6 +1095,36 @@
   opacity: 0.7;
 }
 
+/* Speech-column language dropdown — the header cell IS the control. Undo the header dimming on its
+   cell (a form control must keep its full contrast — WCAG 1.4.11) and let the select overflow. */
+.th:has(.speech-lang) {
+  opacity: 1;
+  overflow: visible;
+}
+.speech-lang {
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.15rem 0.3rem;
+  max-width: 100%;
+  cursor: pointer;
+}
+.speech-lang:hover {
+  border-color: var(--accent);
+}
+
+/* A row showing its English template because the selected language has none — muted + italic, and
+   explained by the cell's title attribute (the fallback isn't signalled by style alone). */
+.speech-fallback {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 .td {
   display: flex;
   align-items: center;

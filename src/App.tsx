@@ -28,8 +28,12 @@ const SESSION_EXPIRED =
 /** Read the deep-link filter from the current URL (`?filter=…`). */
 const filterFromUrl = () => new URLSearchParams(window.location.search).get('filter') ?? '';
 
+/** Read the deep-link speech language from the current URL (`?lang=…`, default English). */
+const langFromUrl = () => new URLSearchParams(window.location.search).get('lang') ?? 'en';
+
 export default function App() {
   const [filter, setFilter] = useState(filterFromUrl); // hydrate from ?filter= so the view is shareable
+  const [speechLang, setSpeechLang] = useState(langFromUrl); // hydrate from ?lang= (Speech column)
   const [editing, setEditing] = useState<Concept | null>(null);
   const [creating, setCreating] = useState(false); // the open modal is for a brand-new concept
   const [saving, setSaving] = useState(false);
@@ -55,6 +59,16 @@ export default function App() {
     const qs = params.toString();
     window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash);
   }, [filter]);
+
+  // Reflect the Speech-column language into `?lang=` the same way (English is the default → no param).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if ((params.get('lang') ?? 'en') === speechLang) return;
+    if (speechLang !== 'en') params.set('lang', speechLang);
+    else params.delete('lang');
+    const qs = params.toString();
+    window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash);
+  }, [speechLang]);
 
   // Drive the native modal dialog from `editing` (showModal centres + traps focus; close() on cancel).
   useEffect(() => {
@@ -288,6 +302,12 @@ export default function App() {
         .sort((a, b) => a.rank - b.rank)
         .map((x) => x.c)
     : concepts.slice(0, loadedCount);
+  // Languages present in the dictionary (en first, rest sorted) — the Speech column's dropdown options.
+  const languages = useMemo(() => {
+    const rest = new Set<string>();
+    for (const c of concepts) for (const s of c.speech ?? []) if (s.lang && s.lang !== 'en') rest.add(s.lang);
+    return ['en', ...[...rest].sort()];
+  }, [concepts]);
   // All concept names — the editor highlights an alias that names a known concept.
   const knownSlugs = useMemo(() => new Set(concepts.map((c) => c.slug)), [concepts]);
   // Dictionary-wide indexes for the editor's authoring helpers (related concepts + alias warnings).
@@ -367,6 +387,9 @@ export default function App() {
             editingId={editing ? conceptId(editing) : null}
             onDelete={canEdit ? toggleRowDelete : undefined}
             changeKind={changeKind}
+            languages={languages}
+            speechLang={speechLang}
+            onSpeechLangChange={setSpeechLang}
             headerActions={
               canEdit ? (
                 <>

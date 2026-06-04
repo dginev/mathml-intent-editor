@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createColumnHelper, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import ISO6391 from 'iso-639-1';
 import type { Concept } from '../types';
 import { conceptId } from '../data/conceptId';
 import type { ChangeKind } from '../data/pendingChanges';
@@ -18,6 +19,16 @@ type TableMeta = {
   changeKind?: (c: Concept) => ChangeKind | null;
   /** Loaded once any visible row has `tex`; lets the Notation cell re-render the rich form (else stored). */
   engine?: TemmlEngine | null;
+  /** The Speech column's language selection: languages present in the data + the active pick. */
+  languages?: string[];
+  speechLang?: string;
+  onSpeechLangChange?: (lang: string) => void;
+};
+
+/** `bg — Bulgarian`-style option label; falls back to the bare code for non-ISO-639-1 keys. */
+const langLabel = (code: string): string => {
+  const name = ISO6391.getName(code);
+  return name ? `${code} — ${name}` : code;
 };
 
 /** Status-column icon + accessible name per pending-change kind (WCAG 1.4.1: state not by color alone). */
@@ -47,7 +58,58 @@ const columns = [
     },
   }),
   columnHelper.accessor('slug', { header: 'Concept', size: 240 }),
-  columnHelper.accessor('en', { header: 'Speech (en)', size: 280 }),
+  columnHelper.display({
+    id: 'speech',
+    size: 280,
+    // Header = a language dropdown over the languages present in the data (the visual label IS the
+    // control, hence the aria-label). With a single language (the seed/e2e path) it stays plain text.
+    header: ({ table }) => {
+      const meta = table.options.meta as TableMeta | undefined;
+      const lang = meta?.speechLang ?? 'en';
+      const languages = meta?.languages ?? ['en'];
+      const onChange = meta?.onSpeechLangChange;
+      if (languages.length <= 1 || !onChange) return `Speech (${lang})`;
+      // A ?lang= deep link may name a language absent from the data — keep the select consistent.
+      const options = languages.includes(lang) ? languages : [...languages, lang];
+      return (
+        <select
+          className="speech-lang"
+          aria-label="Speech language"
+          value={lang}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          {options.map((l) => (
+            <option key={l} value={l}>
+              {langLabel(l)}
+            </option>
+          ))}
+        </select>
+      );
+    },
+    // The selected language's template, carrying its `lang` attribute (screen-reader pronunciation).
+    // A row without that language falls back to its English template, visibly muted + explained by a
+    // title (so the fallback isn't signalled by style alone) — the column never goes blank.
+    cell: ({ row, table }) => {
+      const meta = table.options.meta as TableMeta | undefined;
+      const lang = meta?.speechLang ?? 'en';
+      const c = row.original;
+      if (lang !== 'en') {
+        const text = c.speech?.find((s) => s.lang === lang)?.text;
+        if (text != null && text.trim() !== '') return <span lang={lang}>{text}</span>;
+        return (
+          <span
+            className="speech-fallback"
+            lang="en"
+            title={`no ${ISO6391.getName(lang) || lang} template — showing English`}
+          >
+            {c.en}
+          </span>
+        );
+      }
+      return <span lang="en">{c.en}</span>;
+    },
+  }),
   columnHelper.accessor('area', { header: 'Area', size: 180 }),
   columnHelper.display({
     id: 'notation',
@@ -135,6 +197,9 @@ export function ConceptTable({
   onDelete,
   changeKind,
   headerActions,
+  languages,
+  speechLang,
+  onSpeechLangChange,
 }: {
   /** The exact rows to render (the paged prefix, or the full filtered set when a filter is active). */
   data: Concept[];
@@ -151,6 +216,11 @@ export function ConceptTable({
   changeKind?: (concept: Concept) => ChangeKind | null;
   /** Buttons rendered as a phantom rightmost column in the sticky header (Add entry + batch Save). */
   headerActions?: ReactNode;
+  /** Languages present in the dictionary (en first); >1 turns the Speech header into a dropdown. */
+  languages?: string[];
+  /** The Speech column's selected language (default `en`). */
+  speechLang?: string;
+  onSpeechLangChange?: (lang: string) => void;
 }) {
   // Lazily load Temml only when some row actually has `tex` to re-render (the seed/e2e data has none, so
   // the perf path never pulls Temml). Cells render the stored mathml until the engine resolves.
@@ -169,7 +239,7 @@ export function ConceptTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    meta: { onEdit, onDelete, changeKind, engine },
+    meta: { onEdit, onDelete, changeKind, engine, languages, speechLang, onSpeechLangChange },
   });
 
   const rows = table.getRowModel().rows;

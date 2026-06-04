@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { ConceptTable } from './ConceptTable';
 import type { Concept } from '../types';
@@ -12,12 +12,13 @@ beforeAll(() => {
   vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(800);
 });
 
-const concept = (slug: string): Concept => ({
+const concept = (slug: string, extra: Partial<Concept> = {}): Concept => ({
   slug,
   en: `speech for ${slug}`,
   mathml: [],
   links: [],
   alias: [],
+  ...extra,
 });
 
 const data = [concept('alpha'), concept('beta'), concept('gamma'), concept('delta')];
@@ -43,6 +44,50 @@ describe('ConceptTable status column', () => {
   it('renders no status icon on unchanged rows', () => {
     renderTable();
     expect(within(rowBySlug('delta')).queryByRole('img')).toBeNull();
+  });
+});
+
+describe('ConceptTable speech-language dropdown', () => {
+  const bgData = [
+    concept('power', { speech: [{ lang: 'bg', text: 'степен' }] }),
+    concept('ratio'), // no bg template → falls back to English
+  ];
+
+  it('renders a language select listing the languages present in the data', () => {
+    render(
+      <ConceptTable data={bgData} total={2} languages={['en', 'bg']} speechLang="en" onSpeechLangChange={() => {}} />,
+    );
+    const select = screen.getByRole('combobox', { name: 'Speech language' });
+    const options = within(select).getAllByRole('option');
+    expect(options.map((o) => (o as HTMLOptionElement).value)).toEqual(['en', 'bg']);
+    expect(options[1]).toHaveTextContent('bg — Bulgarian');
+  });
+
+  it('reports a language switch through the callback', () => {
+    const onChange = vi.fn();
+    render(
+      <ConceptTable data={bgData} total={2} languages={['en', 'bg']} speechLang="en" onSpeechLangChange={onChange} />,
+    );
+    fireEvent.change(screen.getByRole('combobox', { name: 'Speech language' }), { target: { value: 'bg' } });
+    expect(onChange).toHaveBeenCalledWith('bg');
+  });
+
+  it('shows the selected language template with its lang attribute, else muted English fallback', () => {
+    render(
+      <ConceptTable data={bgData} total={2} languages={['en', 'bg']} speechLang="bg" onSpeechLangChange={() => {}} />,
+    );
+    const bgCell = within(rowBySlug('power')).getByText('степен');
+    expect(bgCell).toHaveAttribute('lang', 'bg');
+    const fallback = within(rowBySlug('ratio')).getByText('speech for ratio');
+    expect(fallback).toHaveClass('speech-fallback');
+    expect(fallback).toHaveAttribute('lang', 'en');
+    expect(fallback).toHaveAttribute('title', expect.stringContaining('English'));
+  });
+
+  it('renders a plain header when the data holds a single language', () => {
+    render(<ConceptTable data={data} total={data.length} languages={['en']} speechLang="en" onSpeechLangChange={() => {}} />);
+    expect(screen.queryByRole('combobox', { name: 'Speech language' })).toBeNull();
+    expect(screen.getByText('Speech (en)')).toBeInTheDocument();
   });
 });
 
