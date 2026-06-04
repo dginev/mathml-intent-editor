@@ -433,7 +433,7 @@
   border-radius: 6px;
   background: var(--surface);
   color: var(--text-muted);
-  word-break: break-word;
+  overflow-wrap: anywhere; /* belt-and-braces: even an unbreakable name can't overflow the modal */
 }
 .save-prompt textarea {
   width: 100%;

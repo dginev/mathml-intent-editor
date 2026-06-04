@@ -124,14 +124,28 @@ export function formatChangeSummary(s: ChangeSummary): string {
 const capNames = (names: string[], max = 8): string =>
   names.length > max ? `${names.slice(0, max).join(', ')}, +${names.length - max} more` : names.join(', ');
 
-/** A concise PR title from the changes, ending in the author: `add: a; edit: b; delete: c; by @handle`. */
+/** Hard ceiling for the generated PR title (~GitHub's list-view truncation point). */
+const TITLE_MAX = 72;
+
+/**
+ * A concise PR title from the changes, ending in the author: `add: a; edit: b; delete: c; by @handle`.
+ * Hard-capped at TITLE_MAX chars: the change-summary portion is truncated with `…` — at a name
+ * boundary when one fits — while the trailing `by @handle` always survives intact.
+ */
 export function prTitle(s: ChangeSummary, handle: string): string {
   const parts: string[] = [];
   if (s.added.length) parts.push(`add: ${capNames(s.added)}`);
   if (s.modified.length) parts.push(`edit: ${capNames(s.modified)}`);
   if (s.deleted.length) parts.push(`delete: ${capNames(s.deleted)}`);
   const by = `by @${handle}`;
-  return parts.length ? `${parts.join('; ')}; ${by}` : `dictionary update; ${by}`;
+  let head = parts.length ? parts.join('; ') : 'dictionary update';
+  const budget = Math.max(TITLE_MAX - by.length - 2, 1); // 2 = the '; ' joining head to author
+  if (head.length > budget) {
+    const cut = head.slice(0, budget - 1); // leave room for the ellipsis
+    const boundary = Math.max(cut.lastIndexOf(', '), cut.lastIndexOf('; '));
+    head = `${boundary > 0 ? cut.slice(0, boundary) : cut}…`;
+  }
+  return `${head}; ${by}`;
 }
 
 /** A brief Markdown PR description (the body), omitting empty categories — names as inline code. */

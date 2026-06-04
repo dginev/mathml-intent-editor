@@ -113,6 +113,37 @@ describe('changeSummary / formatChangeSummary', () => {
     expect(prTitle({ added: [], modified: [], deleted: ['foo'] }, 'dginev')).toBe('delete: foo; by @dginev');
   });
 
+  it('prTitle caps the title at 72 chars, truncating at a name boundary, keeping the author', () => {
+    // Untruncated would be 76 chars — the summary is cut back to the last complete name.
+    const long = prTitle(
+      {
+        added: ['augmented-binomial-coefficient', 'barycentric-coordinates', 'cauchy-product'],
+        modified: [],
+        deleted: [],
+      },
+      'dginev',
+    );
+    expect(long.length).toBeLessThanOrEqual(72);
+    expect(long).toBe('add: augmented-binomial-coefficient…; by @dginev');
+
+    // Exactly 72 chars → untouched.
+    const exact = prTitle(
+      { added: ['augmented-binomial-coefficient', 'barycentric-coordinates'], modified: [], deleted: [] },
+      'dginev',
+    );
+    expect(exact.length).toBe(72);
+    expect(exact).toBe('add: augmented-binomial-coefficient, barycentric-coordinates; by @dginev');
+
+    // A single name longer than the whole budget still yields a capped title ending in the author.
+    const huge = prTitle(
+      { added: ['x'.repeat(100)], modified: [], deleted: [] },
+      'dginev',
+    );
+    expect(huge.length).toBeLessThanOrEqual(72);
+    expect(huge.endsWith('; by @dginev')).toBe(true);
+    expect(huge).toContain('…');
+  });
+
   it('markdownChangeSummary is a brief markdown body with inline-code names', () => {
     expect(
       markdownChangeSummary({ added: ['a', 'b'], modified: ['c'], deleted: [] }),
