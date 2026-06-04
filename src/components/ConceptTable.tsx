@@ -146,7 +146,7 @@ const columns = [
   columnHelper.display({
     id: 'actions',
     header: '',
-    size: 84,
+    size: 96, // fits the two 1.5×-sized icon buttons without clipping (.td clips overflow)
     cell: ({ row, table }) => {
       const meta = table.options.meta as TableMeta | undefined;
       const onEdit = meta?.onEdit;

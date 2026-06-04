@@ -359,14 +359,19 @@
 }
 .row-edit,
 .row-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
   background: none;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 1.35rem; /* 1.5× the old 0.9rem — the icons were a fiddly click target */
   line-height: 1;
-  padding: 0.2rem 0.3rem;
-  border-radius: 4px;
+  padding: 0.2rem 0.35rem;
+  min-width: 28px; /* ≥ the WCAG 2.5.8 24px minimum target size */
+  min-height: 28px;
+  border-radius: 6px;
 }
 .row-edit:hover {
   color: var(--accent);
