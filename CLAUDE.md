@@ -46,17 +46,27 @@ concepts:
       en: abelian category             # speech template; $1, $2… are positional arg refs
       property: symbol                  # notation form (symbol/indexed/prefix/function/…)
       area: "category theory"
-      mathml:                           # one or more FULL <math>…</math> renderings
-       - "<math><mi intent='abelian-category'>Ab</mi></math>"
+      notations:                        # one or more renderings, each a {tex?, mathml} hash
+       - tex: "\\mathrm{Ab}"            #   tex: optional — present only when authored in TeX
+         mathml: "<math><mi intent='abelian-category'>Ab</mi></math>"  # mandatory, FULL <math>…</math>
       urls: ["…"]                       # reference URLs  (→ Concept.links)
       # optional: alias, notation/notationa…, comments
 ```
 
 Mapping to `Concept` (`src/types.ts`): `concept→slug`, `urls→links`, plus `arity`/`property`; the
 original entry is kept in `raw` for **lossless** serialization (preserves `notation*`/`comments`/key
-order). `Concept.tex` (editor-authored TeX) **is persisted** as `tex:` when present (round-trips via
-parse/serialize, and counts toward content identity) — a decision (per @dginev) to add this field to
-the shared file rather than keep TeX local-only.
+order). **Renderings use the `notations:` shape** (round-2 decision, per @dginev): always a list, one
+entry per rendering, each an inner hash of `tex:` (optional, first) + `mathml:` (mandatory). The
+author writes one *or* the other; we always store the MathML — the pairing makes that explicit instead
+of index-correlating parallel lists, and the list naturally accommodates additional notations.
+`notations[0]` is the primary rendering shown in the table. This **replaced** the older `mathml:` list
++ scalar `tex:` via a one-time whole-file migration (`scripts/migrate-notations.ts`, run with
+vite-node — generates output byte-identical to the editor's own serializer). The parser reads **both**
+shapes (the W3C upstream file and pre-migration branches stay loadable); the serializer emits only the
+new shape and drops the old raw keys on write. The plural name avoids the 16 legacy free-text
+`notation:` sketches (+ `notationa:`/`notationb:`), which keep round-tripping untouched via `raw`.
+A shared-format change — socialize with the W3C group before upstreaming; w3c/mathml-docs tooling
+reading `mathml:` must adapt.
 
 Key facts (verified against the real file, 1012 entries):
 - A concept **name can be overloaded across arities** (`disjoint-union` 1&2, `whittaker-function` 2&3).
@@ -67,8 +77,8 @@ Key facts (verified against the real file, 1012 entries):
   parse→serialize is lossless + idempotent. This is what keeps PR diffs minimal. The backing repo's
   `main` was canonicalized once (an "initial lint") so the first editor Save didn't reformat the whole
   file; with a canonical base, a single-concept edit is a one-line diff.
-- `mathml` items are full `<math>…</math>` carrying `intent='…'`/`arg='…'`; the editor stores edits the
-  same way (`<math>` + the `texToIntent` fragment).
+- Each notation's `mathml` is a full `<math>…</math>` carrying `intent='…'`/`arg='…'`; the editor
+  stores edits the same way (`<math>` + the `texToIntent` fragment, minified).
 - The editor does **not** keep a copy of the real list — it reads it from GitHub. `public/seed.fixture.yml`
   is a small *synthetic* fixture (dev/e2e only), cloned ×`DEV_MULTIPLIER` to hit the 10k-row target.
 
@@ -117,7 +127,7 @@ Work **red→green**: write the failing test first, watch it fail for the right 
   under `src/`; setup is `src/test/setup.ts`; config is the `test` block in `vite.config.ts`.
 - **E2E** — Playwright in `e2e/`, run against the production build (`vite preview` on :4173).
   `e2e/paging.spec.ts` asserts the full 10k+ row list is reachable by paging to exhaustion within
-  60s with no page errors (currently ~16s). Keep it green — it's the guard for table performance.
+  60s with no page errors (currently ~22s). Keep it green — it's the guard for table performance.
 - **Browser gotcha:** Playwright's bundled Chromium has no build for this OS, so the config uses the
   system Google Chrome via `channel: 'chrome'`. Don't switch it back to bundled chromium here.
 
@@ -153,10 +163,17 @@ runs without a backend. So **don't remove the seed path** — the perf e2e depen
   the virtualized rows).
 - `src/components/ConceptTable.tsx` — headless TanStack Table + TanStack Virtual. DOM row windowing
   with absolute-positioned rows; it renders exactly the `data` it's given (filtering happens upstream in
-  `App`). The Notation column shows the **rich** render: `render/notationMarkup.ts` re-renders from the
-  concept's `tex` via Temml when present (the stored `mathml` is the *minified* form — see "Storage is
-  minified, display is rich"), else it renders the stored `mathml` directly. Temml is lazy-loaded only
-  when some visible row has `tex` (the seed/e2e data has none, so the perf path never pulls it).
+  `App`). Carries explicit **ARIA table semantics** (`role="table"/"rowgroup"/"row"/"columnheader"/
+  "cell"`, `aria-rowcount` over the full dictionary + per-row `aria-rowindex` — screen readers see the
+  windowing) and a leading **status column** (`+`/`✎`/`−` icon with accessible name per `ChangeKind`,
+  WCAG 1.4.1 — pairs with the row tint + accent stripe; ratios verified in `index.css`). The **Speech
+  column header is a language dropdown** when the data holds >1 language (`en` first; missing template
+  → muted English fallback with `lang`/`title`; deep-links via `?lang=` like `?filter=`); single-language
+  data (seed/e2e) keeps the plain header. The Notation column shows the **rich** render:
+  `render/notationMarkup.ts` re-renders from `notations[0].tex` via Temml when present (the stored
+  `mathml` is the *minified* form — see "Storage is minified, display is rich"), else it renders the
+  stored `mathml` directly. Temml is lazy-loaded only when some visible row's primary notation has
+  `tex` (the seed/e2e data has none, so the perf path never pulls it).
 - `src/render/temmlEngine.ts` — loads Temml. **Must stay this way:** it imports the prebuilt
   `temml/dist/temml.mjs?url` and `import()`s that URL so Vite emits Temml **untransformed**. Temml
   registers its ~80 commands by mutating a module-level `const _functions = {}` at import time; when
@@ -179,7 +196,7 @@ runs without a backend. So **don't remove the seed path** — the perf e2e depen
   (re-save never churns the diff; the canonical round-trip stays stable). Applied only at the storage
   boundary (the editor's Save).
 - `src/render/notationMarkup.ts` — `notationMarkup(concept, engine)`: the table's display rule —
-  re-render the rich MathML from `concept.tex` when present (cached per `(slug, tex)` so virtualized
+  re-render the rich MathML from `notations[0].tex` when present (cached per `(slug, tex)` so virtualized
   cells don't recompute on scroll), else the stored `mathml` directly. Falls back to stored on render
   failure or before the engine loads.
 - `src/render/texToMathml.ts` — older raw `texToMathML(tex)` seam (`<math>`-wrapped). Not on the app
@@ -189,13 +206,24 @@ runs without a backend. So **don't remove the seed path** — the perf e2e depen
   notations and freshly converted TeX. Markup is **sanitized** (`render/sanitizeMathml.ts`, DOMPurify
   MathML profile + `intent`/`arg`) before `innerHTML`, since raw-MathML notations are user-authored and
   shared via `open.yml` — otherwise stored XSS.
-- `src/components/NotationEditor.tsx` — inline TeX editor: loads Temml (async, via `temmlEngine`). Two
-  side-by-side previews: **Rendered** shows the browser-rendered **rich** Temml MathML; **MathML source
-  (simplified)** shows the **stripped-down** (`minifyMathml`) form that gets stored. Neither preview
-  inner-scrolls — both grow vertically and the modal's own scroll navigates. Save emits the dictionary
-  fragment, minified for TeX-authored notations, verbatim for raw-MathML. Lazy-loaded from `App.tsx`.
-- `src/App.tsx` — shell: loads the seed, filter input, table; row click opens the editor; Save persists
-  into local state (the PR-backing of saves is the next milestone).
+- `src/components/NotationEditor.tsx` — the row editor: loads Temml (async, via `temmlEngine`). The
+  primary **and every additional notation** use the same authoring block (`NotationAuthor`): a TeX |
+  Raw MathML mode toggle, a full-width source line, a per-block **inline error slot**, and a two-panel
+  preview line — **Rendered** (the rich Temml MathML) ∥ **MathML source (simplified)** (the
+  `minifyMathml` form that gets stored). Neither preview inner-scrolls — both grow vertically and the
+  modal's own scroll navigates; Done/Cancel sit in a **sticky bottom action bar** (Delete on the far
+  side). One derivation pipeline (`deriveNotation`) per notation: TeX → `texToIntent` → minify; raw →
+  XML-validate, stored verbatim with no `tex` key. A TeX-authored extra persists `{tex, mathml}` and
+  reopens in TeX mode. Reports `onDirtyChange` (content-state vs first-render snapshot; edit-then-revert
+  reads clean) — `App` uses it to guard backdrop/Esc dismissal behind "Discard?". Lazy-loaded from
+  `App.tsx`.
+- `src/components/Faq.tsx` — the sign-in/permissions FAQ `<dialog>` (header "FAQ" link). Paired with an
+  `InfoPopover` beside the Sign-in button (identity-only consent in one breath). Both exist to dispel
+  the "an app wants my GitHub" fear (round-2 feedback).
+- `src/App.tsx` — shell: loads the dictionary, filter input (`?filter=`), speech-language state
+  (`?lang=`), table; the row ✎ opens the editor; Save submits the batch as a PR. The generated PR title
+  is hard-capped at 72 chars (`prTitle` — summary truncates at a name boundary, `by @handle` always
+  survives). Error toasts persist until dismissed (info toasts auto-close after 12s).
 
 ## MathML Intent rendering
 
@@ -226,13 +254,14 @@ render **on screen** but write a **minimal** tree to `open.yml`. Rather than pat
 MathML, we do it **app-side** so the engine stays stock and display keeps the cosmetics:
 
 - **`texToIntent` → rich** (no stripping); feeds the editor preview and the table.
-- **`minifyMathml`** runs at the **storage boundary only** (the editor's Save, `buildUpdated`), not in
-  `serialize.ts` — so untouched entries round-trip verbatim (no whole-file reformat) and a single edit
-  stays a minimal diff. The model's `mathml` is therefore the **minified** form, which is what
-  `reconcile.ts::contentKey` compares — so a saved→reloaded entry reads as unchanged (no spurious dirty).
-- **Display re-renders rich from `tex`** (`notationMarkup`): `tex` present → rich Temml render; no `tex`
-  (seed/legacy/raw-authored) → the stored `mathml` directly. So after a save+reload, a `tex`-bearing cell
-  is still pretty even though the file holds the lean form.
+- **`minifyMathml`** runs at the **storage boundary only** (the editor's Save, via `deriveNotation` in
+  `buildUpdated`), not in `serialize.ts` — so untouched entries round-trip verbatim (no whole-file
+  reformat) and a single edit stays a minimal diff. Each notation's stored `mathml` is therefore the
+  **minified** form, which is what `reconcile.ts::contentKey` compares — so a saved→reloaded entry
+  reads as unchanged (no spurious dirty).
+- **Display re-renders rich from `tex`** (`notationMarkup`): `notations[0].tex` present → rich Temml
+  render; no `tex` (seed/legacy/raw-authored) → the stored `mathml` directly. So after a save+reload, a
+  `tex`-bearing cell is still pretty even though the file holds the lean form.
 
 (Considered but not taken: a `minimal`/`intent` flag inside the Temml fork — rejected because it would
 minify the display too and add fork-maintenance burden for no gain over the app-side pass.)
@@ -305,10 +334,12 @@ The earlier "user opens the PR with their own token" model was replaced. The agr
   sides surface as conflicts.
 - **Data repo = public `dginev/mathml-intent-open`**, **single `open.yml`** (fetched whole, rendered
   lazily, rewritten whole). Revisit splitting if conflicts become real.
-- **TeX round-trip: store both, MathML canonical.** `Concept.tex` holds the primary notation's source;
-  it is **written to `open.yml` as `tex:`** (when present) and read back, so re-edits reopen it. Seed
+- **TeX round-trip: store both, MathML canonical.** Each notation hash holds its authored `tex:`
+  (when present) alongside the stored `mathml:`, and reads it back so re-edits reopen the source. Seed
   entries lack `tex` and re-author from blank.
-- **Hosting: app on GitHub Pages** (Actions deploy; `BASE_PATH=/<repo>/`).
+- **Hosting: app on GitHub Pages** (Actions deploy; `BASE_PATH=/mathml-intent-open-editor/` — the repo
+  was renamed to `dginev/mathml-intent-open-editor` in round 2; Pages project paths don't redirect, so
+  the BASE_PATH and the GitHub App's OAuth callback URL had to follow).
 
 **Status:** deployed and verified end-to-end — the bot frontend (GitHub Pages) + the OAuth/PR service
 (`latexml.rs`), sign-in → `/auth`, Save → `/submit`, with commits **authored as the contributor**. The
@@ -323,6 +354,18 @@ consent — the bot's write access comes from the maintainer's installation). Th
 > Left empirically open: whether a bot-authored commit earns an *unaffiliated* contributor green-square
 > credit too, or only the name-on-the-commit authorship display (the throwaway probe was deleted before
 > it resolved; re-test with a fresh repo + ~24h wait if it matters).
+
+## Round-2 feedback (2026-06-04) — landed
+
+All ten round-2 items were implemented (see `w3c_plan.md` for the full plan): WCAG row marking
+(status-icon column + accent stripes + table ARIA + verified contrast), 72-char PR-title cap, the
+Speech-column language dropdown (`?lang=`), the `notations:` schema + full per-extra TeX/raw authoring,
+the sign-in FAQ (ⓘ + dialog), the repo rename follow-through, and the data-repo CI checks
+(duplicate-`(concept, arity)` validator + line-length disable in `dginev/mathml-intent-open`; the
+Core-overlap check was **deferred** — revisit with the W3C group). Out-of-band/coordinated remainders:
+the `open.yml` **migration commit** in the data repo (generate with `scripts/migrate-notations.ts`,
+land together with the editor deploy, close old-shape PR branches first, regenerate `intent_open.json`
+if it derives from `open.yml`), and socializing the `notations:` schema with the W3C group.
 
 ## Backlog — deferred community feedback
 
