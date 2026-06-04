@@ -10,7 +10,8 @@ import { useIdentity } from './hooks/useIdentity';
 import { useTheme } from './hooks/useTheme';
 import { useGlobalFindShortcut } from './hooks/useGlobalFindShortcut';
 import { ConceptTable } from './components/ConceptTable';
-import { Toast } from './components/ui';
+import { Faq } from './components/Faq';
+import { InfoPopover, Toast } from './components/ui';
 import { repoConfigFromEnv, serviceConfigFromEnv } from './github/config';
 import { resetSession, submitToService } from './github/submitClient';
 import { clearPr, fetchPullState, loadPr, savePr, type ActivePr } from './github/prSession';
@@ -44,6 +45,7 @@ export default function App() {
   // The PR the user's branch terminates in; when it closes/merges we reset the session and reload.
   const [activePr, setActivePr] = useState<ActivePr | null>(() => loadPr(localStorage));
   const [reloadKey, setReloadKey] = useState(0); // bump to force a fresh dictionary load
+  const [faqOpen, setFaqOpen] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const saveDialogRef = useRef<HTMLDialogElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
@@ -361,10 +363,24 @@ export default function App() {
                 Sign out (@{identity.handle})
               </button>
             ) : (
-              <button type="button" className="auth-btn" onClick={signIn}>
-                Sign in with GitHub
-              </button>
+              <>
+                <button type="button" className="auth-btn" onClick={signIn}>
+                  Sign in with GitHub
+                </button>
+                {/* The reassurance at the moment of fear: what the OAuth consent actually contains. */}
+                <InfoPopover label="About GitHub sign-in">
+                  <p className="legend-note" data-testid="signin-help">
+                    Signing in shares <strong>identity only</strong> — your public <code>@handle</code>.{' '}
+                    <strong>No repository access, no email, no write scope.</strong> Edits are committed
+                    by the project bot, authored as you. Revoke anytime under GitHub → Settings →
+                    Applications. See the <em>FAQ</em> for details.
+                  </p>
+                </InfoPopover>
+              </>
             ))}
+          <button type="button" className="faq-btn" onClick={() => setFaqOpen(true)}>
+            FAQ
+          </button>
           <button
             type="button"
             className="theme-btn"
@@ -517,6 +533,8 @@ export default function App() {
           </div>
         </div>
       </dialog>
+
+      <Faq open={faqOpen} onClose={() => setFaqOpen(false)} />
 
       {saveError && <Toast message={saveError} onClose={dismissSaveError} />}
     </div>

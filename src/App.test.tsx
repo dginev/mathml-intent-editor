@@ -174,4 +174,20 @@ describe('App (integration: save/branch flow)', () => {
     expect(screen.queryByRole('button', { name: '+ Add entry' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Sign in with GitHub' })).toBeInTheDocument();
   });
+
+  it('reassures about sign-in permissions: ⓘ popover at the button + FAQ from the header', async () => {
+    render(<App />); // signed out — the moment the permission fear strikes
+    await screen.findByTestId('concept-count');
+
+    // The ⓘ next to "Sign in with GitHub": identity-only consent in one breath.
+    fireEvent.click(screen.getByLabelText('About GitHub sign-in'));
+    const pop = screen.getByTestId('signin-help');
+    expect(pop).toHaveTextContent(/@handle/);
+    expect(pop).toHaveTextContent(/no repository access/i);
+
+    // The fuller FAQ dialog opens from the header link.
+    fireEvent.click(screen.getByRole('button', { name: 'FAQ' }));
+    expect(screen.getByTestId('faq')).toHaveTextContent(/why sign in/i);
+    fireEvent.click(screen.getByRole('button', { name: 'Close FAQ' }));
+  });
 });

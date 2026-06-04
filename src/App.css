@@ -179,6 +179,46 @@
   background: var(--hover);
 }
 
+/* Header FAQ link-button + the FAQ dialog body. */
+.faq-btn {
+  border: none;
+  background: none;
+  color: var(--link);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0.2rem 0.3rem;
+}
+.faq-modal {
+  width: min(640px, 92vw);
+}
+.faq h2 {
+  margin-top: 0;
+}
+.faq h3 {
+  margin: 1rem 0 0.25rem;
+  font-size: 0.95rem;
+}
+.faq p {
+  margin: 0.25rem 0;
+  font-size: 0.9rem;
+}
+.faq .actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+.faq .actions button {
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
 /* The row currently open in the editor — highlighted (and scrolled to centre) behind the modal. */
 .tbody .tr.row-editing {
   background: var(--hover);
@@ -558,6 +598,18 @@
 
 .info-wrap {
   display: inline-flex;
+}
+/* In the header toolbar the popover anchors to its ⓘ and drops BELOW (above would leave the page);
+   fixed width, right-aligned so it stays inside the viewport next to the sign-in button. */
+.toolbar .info-wrap {
+  position: relative;
+}
+.toolbar .legend-pop {
+  top: calc(100% + 6px);
+  bottom: auto;
+  left: auto;
+  right: 0;
+  width: min(26rem, 80vw);
 }
 /* The legend floats above the field it belongs to and spans that field's width (which is the modal
    width, or a modal column) — so it stays aligned to the modal edges and can never overflow + clip. */
