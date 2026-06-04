@@ -28,4 +28,18 @@ describe('Toast', () => {
     act(() => vi.advanceTimersByTime(60000));
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it('error toasts persist until dismissed (no default auto-close)', () => {
+    const onClose = vi.fn();
+    render(<Toast message="Save failed: 500" kind="error" onClose={onClose} />);
+    act(() => vi.advanceTimersByTime(600000));
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('info toasts keep the 12s default auto-dismiss', () => {
+    const onClose = vi.fn();
+    render(<Toast message="PR updated" kind="info" onClose={onClose} />);
+    act(() => vi.advanceTimersByTime(12000));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

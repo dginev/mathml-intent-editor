@@ -27,10 +27,15 @@
   --code-text: #16191d;
   --annot-bg: rgba(109, 40, 217, 0.12);
   --annot-text: #5b21b6; /* dark purple on the light tint */
-  /* Pending-change row tints (GitHub-style diff colours; changed = the Save accent). */
-  --diff-add-bg: #e6ffec;
-  --diff-del-bg: #ffebe9;
-  --diff-changed-bg: rgba(109, 40, 217, 0.1);
+  /* Pending-change row tints + accents (GitHub-style diff colours; changed = the Save accent).
+     WCAG-verified (2026-06): text #16191d over each tint ≥ 13:1 (1.4.3); each accent ≥ 4:1 against
+     its tint and ≥ 5:1 against the page bg (1.4.11 needs 3:1) — recompute if re-tuning. */
+  --diff-add-bg: #d2f3dc;
+  --diff-del-bg: #ffd7d5;
+  --diff-changed-bg: #ebe1fa;
+  --diff-add-accent: #1a7f37;
+  --diff-del-accent: #cf222e;
+  --diff-changed-accent: #8250df;
 }
 
 [data-theme='dark'] {
@@ -55,9 +60,13 @@
   --code-text: #eaecef;
   --annot-bg: rgba(139, 92, 246, 0.22);
   --annot-text: #d6c8ff; /* light lavender — high contrast on the dark tint */
-  --diff-add-bg: rgba(46, 160, 67, 0.18);
-  --diff-del-bg: rgba(248, 81, 73, 0.18);
-  --diff-changed-bg: rgba(139, 92, 246, 0.2);
+  /* WCAG-verified (2026-06): text ≥ 10:1 over each composite tint; accents ≥ 4:1 vs tint. */
+  --diff-add-bg: rgba(46, 160, 67, 0.25);
+  --diff-del-bg: rgba(248, 81, 73, 0.22);
+  --diff-changed-bg: rgba(139, 92, 246, 0.25);
+  --diff-add-accent: #3fb950;
+  --diff-del-accent: #f85149;
+  --diff-changed-accent: #a371f7;
 }
 
 /* Follow the OS preference only when no explicit theme has been chosen. */
@@ -84,9 +93,12 @@
     --code-text: #eaecef;
     --annot-bg: rgba(139, 92, 246, 0.22);
     --annot-text: #d6c8ff;
-    --diff-add-bg: rgba(46, 160, 67, 0.18);
-    --diff-del-bg: rgba(248, 81, 73, 0.18);
-    --diff-changed-bg: rgba(139, 92, 246, 0.2);
+    --diff-add-bg: rgba(46, 160, 67, 0.25);
+    --diff-del-bg: rgba(248, 81, 73, 0.22);
+    --diff-changed-bg: rgba(139, 92, 246, 0.25);
+    --diff-add-accent: #3fb950;
+    --diff-del-accent: #f85149;
+    --diff-changed-accent: #a371f7;
   }
 }
 

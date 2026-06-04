@@ -20,7 +20,32 @@ type TableMeta = {
   engine?: TemmlEngine | null;
 };
 
+/** Status-column icon + accessible name per pending-change kind (WCAG 1.4.1: state not by color alone). */
+const STATUS: Record<ChangeKind, { icon: string; label: string }> = {
+  added: { icon: '+', label: 'added' },
+  changed: { icon: '✎', label: 'edited' },
+  deleted: { icon: '−', label: 'pending deletion' },
+};
+
 const columns = [
+  columnHelper.display({
+    id: 'status',
+    header: '',
+    size: 36,
+    // A leading icon naming the row's pending change — the redundant, non-color state cue that the
+    // row tint + border stripe pair with. Empty for unchanged rows.
+    cell: ({ row, table }) => {
+      const meta = table.options.meta as TableMeta | undefined;
+      const kind = meta?.changeKind?.(row.original) ?? null;
+      if (!kind) return null;
+      const s = STATUS[kind];
+      return (
+        <span className={`row-status status-${kind}`} role="img" aria-label={s.label} title={s.label}>
+          {s.icon}
+        </span>
+      );
+    },
+  }),
   columnHelper.accessor('slug', { header: 'Concept', size: 240 }),
   columnHelper.accessor('en', { header: 'Speech (en)', size: 280 }),
   columnHelper.accessor('area', { header: 'Area', size: 180 }),
@@ -177,18 +202,27 @@ export function ConceptTable({
   return (
     <div className="table-scroll" ref={scrollRef} data-testid="table-scroll">
       {/* width is intrinsic (max-content) so the phantom header-actions column extends the table to its
-          right; minWidth keeps it at least as wide as the data columns. */}
-      <div className="table-inner" style={{ minWidth: totalWidth }}>
-        <div className="thead">
+          right; minWidth keeps it at least as wide as the data columns. ARIA table semantics are
+          explicit (the grid is divs): aria-rowcount spans the FULL dictionary (+1 for the header row)
+          and each virtualized row carries its absolute aria-rowindex, so screen readers know the DOM
+          holds a window of a larger table. */}
+      <div
+        className="table-inner"
+        style={{ minWidth: totalWidth }}
+        role="table"
+        aria-label="Concept dictionary"
+        aria-rowcount={total + 1}
+      >
+        <div className="thead" role="rowgroup">
           {table.getHeaderGroups().map((hg) => (
-            <div className="tr" key={hg.id}>
+            <div className="tr" role="row" aria-rowindex={1} key={hg.id}>
               {hg.headers.map((h) => (
-                <div className="th" key={h.id} style={{ width: h.getSize() }}>
+                <div className="th" role="columnheader" key={h.id} style={{ width: h.getSize() }}>
                   {flexRender(h.column.columnDef.header, h.getContext())}
                 </div>
               ))}
               {headerActions && (
-                <div className="th th-actions" key="__header-actions">
+                <div className="th th-actions" role="columnheader" key="__header-actions">
                   {headerActions}
                 </div>
               )}
@@ -196,7 +230,7 @@ export function ConceptTable({
           ))}
         </div>
 
-        <div className="tbody" style={{ height: virtualizer.getTotalSize() }}>
+        <div className="tbody" role="rowgroup" style={{ height: virtualizer.getTotalSize() }}>
           {items.map((vi) => {
             const row = rows[vi.index];
             const kind = changeKind?.(row.original) ?? null;
@@ -206,6 +240,8 @@ export function ConceptTable({
                   kind ? ` row-${kind}` : ''
                 }`}
                 key={row.id}
+                role="row"
+                aria-rowindex={vi.index + 2} // 1-based, after the header row
                 data-index={vi.index}
                 data-row-index={vi.index}
                 data-slug={row.original.slug}
@@ -213,7 +249,7 @@ export function ConceptTable({
                 style={{ transform: `translateY(${vi.start}px)`, minHeight: ROW_HEIGHT }}
               >
                 {row.getVisibleCells().map((cell) => (
-                  <div className="td" key={cell.id} style={{ width: cell.column.getSize() }}>
+                  <div className="td" role="cell" key={cell.id} style={{ width: cell.column.getSize() }}>
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </div>
                 ))}

@@ -81,29 +81,32 @@ export function InfoPopover({ label, children }: { label: string; children: Reac
 }
 
 /**
- * A floating, dismissible notification (used to surface a failed Save). Auto-dismisses after `duration`
- * ms (set `duration={0}` to keep it until manually closed); a new `message` restarts the timer.
+ * A floating, dismissible notification (used to surface a failed Save). Info toasts auto-dismiss
+ * after `duration` ms (default 12s); **error toasts persist until manually closed** (a vanishing
+ * error is a WCAG/UX failure — the user may not have read it). An explicit `duration` overrides
+ * either default (`0` = sticky); a new `message` restarts the timer.
  */
 export function Toast({
   message,
   kind = 'error',
   onClose,
-  duration = 12000,
+  duration,
 }: {
   message: string;
   kind?: 'error' | 'info';
   onClose: () => void;
   duration?: number;
 }) {
+  const ms = duration ?? (kind === 'error' ? 0 : 12000);
   const closeRef = useRef(onClose);
   useEffect(() => {
     closeRef.current = onClose;
   }, [onClose]);
   useEffect(() => {
-    if (!duration) return;
-    const t = setTimeout(() => closeRef.current(), duration);
+    if (!ms) return;
+    const t = setTimeout(() => closeRef.current(), ms);
     return () => clearTimeout(t);
-  }, [message, duration]);
+  }, [message, ms]);
   return (
     <div className={`toast toast-${kind}`} role="alert" data-testid="toast">
       <span className="toast-msg">{message}</span>

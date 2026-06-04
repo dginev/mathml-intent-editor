@@ -337,19 +337,50 @@
   background: var(--hover);
 }
 
-/* Pending-change row tints (kept visible until Save): added = green, changed = the Save purple,
-   deleted = red. Listed after :hover so they win at equal specificity and stay legible on hover. */
+/* Pending-change row marking (kept visible until Save): added = green, changed = the Save purple,
+   deleted = red. Tint + a strong left accent stripe + a subtle full-row outline, paired with the
+   status-column icon — so state is never conveyed by color alone (WCAG 1.4.1) and the marks meet
+   3:1 non-text contrast (1.4.11; ratios verified in index.css). Listed after :hover so they win at
+   equal specificity and stay legible on hover. */
 .tbody .tr.row-added,
 .tbody .tr.row-added:hover {
   background: var(--diff-add-bg);
+  box-shadow:
+    inset 4px 0 0 var(--diff-add-accent),
+    inset 0 0 0 1px color-mix(in srgb, var(--diff-add-accent) 55%, transparent);
 }
 .tbody .tr.row-changed,
 .tbody .tr.row-changed:hover {
   background: var(--diff-changed-bg);
+  box-shadow:
+    inset 4px 0 0 var(--diff-changed-accent),
+    inset 0 0 0 1px color-mix(in srgb, var(--diff-changed-accent) 55%, transparent);
 }
 .tbody .tr.row-deleted,
 .tbody .tr.row-deleted:hover {
   background: var(--diff-del-bg);
+  box-shadow:
+    inset 4px 0 0 var(--diff-del-accent),
+    inset 0 0 0 1px color-mix(in srgb, var(--diff-del-accent) 55%, transparent);
+}
+
+/* The leading status icon (+ / ✎ / −) naming the row's pending change; colored to match the stripe. */
+.row-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-weight: 700;
+}
+.row-status.status-added {
+  color: var(--diff-add-accent);
+}
+.row-status.status-changed {
+  color: var(--diff-changed-accent);
+}
+.row-status.status-deleted {
+  color: var(--diff-del-accent);
 }
 
 /* ---- edit modal (native <dialog>, auto-centred by the UA) ---- */
