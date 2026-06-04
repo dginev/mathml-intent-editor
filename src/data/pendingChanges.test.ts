@@ -15,7 +15,7 @@ import type { Concept } from '../types';
 
 const c = (slug: string, mathml = '<math><mi>x</mi></math>'): Concept => ({
   slug,
-  mathml: [mathml],
+  notations: [{ mathml }],
   links: [],
   alias: [],
 });

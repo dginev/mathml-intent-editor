@@ -29,8 +29,8 @@ const args = (extra: Partial<Parameters<typeof loadDictionary>[0]> = {}) => ({
 });
 
 const editRec = (slug: string, value: string, base: string | null): EditCache[string] => ({
-  value: { slug, en: undefined, area: undefined, mathml: [value], links: [], alias: [] } as Concept,
-  baseAtEdit: base ? ({ slug, mathml: [base], links: [], alias: [] } as Concept) : null,
+  value: { slug, en: undefined, area: undefined, notations: [{ mathml: value }], links: [], alias: [] } as Concept,
+  baseAtEdit: base ? ({ slug, notations: [{ mathml: base }], links: [], alias: [] } as Concept) : null,
 });
 
 describe('loadDictionary', () => {
@@ -47,7 +47,7 @@ describe('loadDictionary', () => {
     const { concepts, conflicts } = await loadDictionary(
       args({ fetchImpl: fetchFor({ power: 'p' }), edits }),
     );
-    expect(concepts.find((c) => c.slug === 'power')?.mathml).toEqual(['mine']);
+    expect(concepts.find((c) => c.slug === 'power')?.notations).toEqual([{ mathml: 'mine' }]);
     expect(conflicts).toEqual([]);
   });
 
@@ -68,7 +68,7 @@ describe('loadDictionary', () => {
 
   it('drops a concept the user deleted locally (null tombstone)', async () => {
     const edits: EditCache = {
-      'power#': { value: null, baseAtEdit: { slug: 'power', mathml: ['p'], links: [], alias: [] } as Concept },
+      'power#': { value: null, baseAtEdit: { slug: 'power', notations: [{ mathml: 'p' }], links: [], alias: [] } as Concept },
     };
     const { concepts, conflicts } = await loadDictionary(
       args({ fetchImpl: fetchFor({ power: 'p', sum: 's' }), edits }),

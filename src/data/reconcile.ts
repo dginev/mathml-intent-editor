@@ -12,8 +12,9 @@ export type MergeResult = {
 
 /**
  * Stable identity of a concept's *file* content (order-sensitive on arrays); `undefined` = absent.
- * Includes `tex` (now persisted to open.yml), so re-authoring the TeX counts as a change even when the
- * rendered MathML is unchanged. Exported so the pending-change classifier shares one "content changed".
+ * Keys on the `notations` list — both each rendering's stored `mathml` and its authored `tex` (so
+ * re-authoring the TeX counts as a change even when the rendered MathML is unchanged). Exported so
+ * the pending-change classifier shares one "content changed".
  */
 export function contentKey(c?: Concept): string {
   if (!c) return '∅';
@@ -23,11 +24,10 @@ export function contentKey(c?: Concept): string {
     c.area ?? null,
     c.arity ?? null,
     c.property ?? null,
-    c.mathml,
+    c.notations.map((n) => [n.tex ?? null, n.mathml]),
     c.links,
     c.alias,
     c.speech?.length ? c.speech : null,
-    c.tex ?? null,
   ]);
 }
 

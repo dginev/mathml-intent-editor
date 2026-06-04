@@ -7,7 +7,7 @@ import type { Concept } from '../types';
 const concept = (over: Partial<Concept> & { slug: string }): Concept => ({
   en: undefined,
   area: undefined,
-  mathml: [],
+  notations: [],
   links: [],
   alias: [],
   ...over,
@@ -16,7 +16,14 @@ const concept = (over: Partial<Concept> & { slug: string }): Concept => ({
 describe('serializeConcepts', () => {
   it('writes the W3C shape: a single concepts group of intents', () => {
     const out = serializeConcepts([
-      concept({ slug: 'power', arity: 2, en: 'power', area: 'arithmetic', mathml: ['<math/>'], links: ['u'] }),
+      concept({
+        slug: 'power',
+        arity: 2,
+        en: 'power',
+        area: 'arithmetic',
+        notations: [{ mathml: '<math/>' }],
+        links: ['u'],
+      }),
     ]);
     const doc = parse(out) as { concepts: Array<{ title: string; intents: Array<Record<string, unknown>> }> };
     expect(doc.concepts).toHaveLength(1);
@@ -24,6 +31,7 @@ describe('serializeConcepts', () => {
     const e = doc.concepts[0].intents[0];
     expect(e.concept).toBe('power');
     expect(e.arity).toBe(2);
+    expect(e.notations).toEqual([{ mathml: '<math/>' }]);
     expect(e.urls).toEqual(['u']); // links → urls
     expect('links' in e).toBe(false);
   });
@@ -34,15 +42,39 @@ describe('serializeConcepts', () => {
     expect(doc.concepts[0].intents.map((e) => e.concept)).toEqual(['alpha', 'beta']);
   });
 
-  it('preserves truly-unmodeled fields via raw, and writes the editor tex', () => {
+  it('preserves truly-unmodeled fields via raw, and writes tex inside its notation', () => {
     const out = serializeConcepts([
-      concept({ slug: 'x', property: 'symbol', tex: '\\arg{a}{x}', raw: { concept: 'x', notation: 'legacy' } }),
+      concept({
+        slug: 'x',
+        property: 'symbol',
+        notations: [{ tex: '\\arg{a}{x}', mathml: "<mi arg='a'>x</mi>" }],
+        raw: { concept: 'x', notation: 'legacy free-text sketch' },
+      }),
     ]);
     const e = (parse(out) as { concepts: Array<{ intents: Array<Record<string, unknown>> }> }).concepts[0]
       .intents[0];
-    expect(e.notation).toBe('legacy'); // unmodeled — preserved from raw
+    expect(e.notation).toBe('legacy free-text sketch'); // unmodeled legacy key — preserved from raw
     expect(e.property).toBe('symbol'); // modeled — from the concept
-    expect(e.tex).toBe('\\arg{a}{x}'); // editor TeX is now persisted as `tex:`
+    expect(e.notations).toEqual([{ tex: '\\arg{a}{x}', mathml: "<mi arg='a'>x</mi>" }]);
+    // tex precedes mathml inside each notation hash (the source above its rendering).
+    expect(out.indexOf('tex:')).toBeGreaterThan(-1);
+    expect(out.indexOf('tex:')).toBeLessThan(out.indexOf("mathml: <mi arg='a'>x</mi>"));
+  });
+
+  it('migrates old-shape raw keys: mathml:/tex: are dropped in favor of notations:', () => {
+    const out = serializeConcepts([
+      concept({
+        slug: 'x',
+        notations: [{ tex: '\\mathrm{x}', mathml: '<mi>x</mi>' }],
+        // raw still carries the pre-migration keys (parsed from an old-shape file)
+        raw: { concept: 'x', mathml: ['<mi>x</mi>'], tex: '\\mathrm{x}' },
+      }),
+    ]);
+    const e = (parse(out) as { concepts: Array<{ intents: Array<Record<string, unknown>> }> }).concepts[0]
+      .intents[0];
+    expect('mathml' in e).toBe(false); // old keys don't survive a write
+    expect('tex' in e).toBe(false);
+    expect(e.notations).toEqual([{ tex: '\\mathrm{x}', mathml: '<mi>x</mi>' }]);
   });
 
   it('deletes a modeled field that was cleared (set to empty)', () => {
@@ -73,12 +105,13 @@ describe('serializeConcepts', () => {
 
   it('round-trips parse → serialize → parse without losing concepts', () => {
     const yaml = serializeConcepts([
-      concept({ slug: 'a', arity: 0, property: 'symbol', mathml: ['<math><mi>A</mi></math>'] }),
-      concept({ slug: 'b', arity: 1, mathml: ['<math><mi>B</mi></math>'] }),
+      concept({ slug: 'a', arity: 0, property: 'symbol', notations: [{ mathml: '<math><mi>A</mi></math>' }] }),
+      concept({ slug: 'b', arity: 1, notations: [{ mathml: '<math><mi>B</mi></math>' }] }),
     ]);
     const back = parseDictionary(yaml);
     expect(back.map((c) => c.slug)).toEqual(['a', 'b']);
     expect(back[0].arity).toBe(0);
     expect(back[0].property).toBe('symbol');
+    expect(back[0].notations).toEqual([{ mathml: '<math><mi>A</mi></math>' }]);
   });
 });

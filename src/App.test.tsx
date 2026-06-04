@@ -9,6 +9,13 @@ vi.mock('./github/config', () => ({
   serviceConfigFromEnv: () => ({ serviceUrl: 'https://svc.example', clientId: 'cid' }),
 }));
 
+// The (lazy) NotationEditor loads Temml via `?url` + dynamic import, which only works in the browser
+// bundle; in jsdom we substitute the Node-native Temml build.
+vi.mock('./render/temmlEngine', async () => {
+  const temml = (await import('temml')).default;
+  return { loadTemml: () => Promise.resolve(temml) };
+});
+
 import App from './App';
 
 /** A JWT-shaped token whose `exp` is `days` out (so the renew-on-visit threshold isn't tripped). */
@@ -25,12 +32,12 @@ const base: Concept = {
   slug: 'power',
   arity: 2,
   en: '$1 to the $2',
-  mathml: ['<math><msup><mi>x</mi><mn>2</mn></msup></math>'],
+  notations: [{ mathml: '<math><msup><mi>x</mi><mn>2</mn></msup></math>' }],
   links: [],
   alias: [],
 };
 const edited: Concept = { ...base, en: '$1 raised to $2' };
-const baseYaml = w3cYaml([{ concept: 'power', arity: 2, en: base.en, mathml: base.mathml }]);
+const baseYaml = w3cYaml([{ concept: 'power', arity: 2, en: base.en, mathml: base.notations.map((n) => n.mathml) }]);
 
 const textRes = (status: number, text: string) => ({ ok: status < 400, status, text: async () => text });
 const jsonRes = (obj: unknown) => ({ ok: true, status: 200, json: async () => obj, text: async () => JSON.stringify(obj) });
@@ -109,7 +116,7 @@ describe('App (integration: save/branch flow)', () => {
   it('hydrates the speech language from ?lang= and shows that language column', async () => {
     // A dictionary carrying a Bulgarian template alongside English.
     const bgYaml = w3cYaml([
-      { concept: 'power', arity: 2, en: base.en, bg: 'степен', mathml: base.mathml },
+      { concept: 'power', arity: 2, en: base.en, bg: 'степен', mathml: base.notations.map((n) => n.mathml) },
     ]);
     vi.stubGlobal(
       'fetch',
@@ -129,6 +136,34 @@ describe('App (integration: save/branch flow)', () => {
     // Switching back to English drops the param from the URL (en is the default).
     fireEvent.change(select, { target: { value: 'en' } });
     await waitFor(() => expect(window.location.search).toBe(''));
+  });
+
+  it('dismissing a dirty editor via the backdrop asks before discarding; clean closes silently', async () => {
+    localStorage.setItem('intent-editor.identity', JSON.stringify({ handle: 'dginev', jwt: jwtExp(7) }));
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<App />);
+
+    // Open the editor on the row, make no change, backdrop-click → closes without any prompt.
+    fireEvent.click(await screen.findByLabelText('Edit power'));
+    await screen.findByTestId('notation-editor');
+    const dialog = () => document.querySelector('dialog.modal') as HTMLDialogElement;
+    fireEvent.click(dialog());
+    await waitFor(() => expect(screen.queryByTestId('notation-editor')).toBeNull());
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    // Reopen, edit a field — a refused prompt keeps the editor (and the unsaved work) open.
+    fireEvent.click(await screen.findByLabelText('Edit power'));
+    await screen.findByTestId('notation-editor');
+    fireEvent.change(screen.getByTestId('slug-input'), { target: { value: 'power-renamed' } });
+    fireEvent.click(dialog());
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('notation-editor')).toBeInTheDocument();
+
+    // Accepting the prompt discards and closes.
+    confirmSpy.mockReturnValue(true);
+    fireEvent.click(dialog());
+    await waitFor(() => expect(screen.queryByTestId('notation-editor')).toBeNull());
+    confirmSpy.mockRestore();
   });
 
   it('gates editing behind sign-in when a service is configured', async () => {

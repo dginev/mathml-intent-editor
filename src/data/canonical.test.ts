@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { parse } from 'yaml';
 import { describe, expect, it } from 'vitest';
 import { parseDictionary } from './parse';
 import { serializeConcepts } from './serialize';
@@ -16,7 +17,7 @@ const fields = (c: ReturnType<typeof parseDictionary>[number]) => ({
   area: c.area,
   arity: c.arity,
   property: c.property,
-  mathml: c.mathml,
+  notations: c.notations,
   links: c.links,
   alias: c.alias,
 });
@@ -53,6 +54,52 @@ describe('canonical round-trip on the seed fixture', () => {
 
   it('serialize is idempotent — the canonical form is byte-stable', () => {
     const once = serializeConcepts(first);
+    const twice = serializeConcepts(parseDictionary(once));
+    expect(twice).toBe(once);
+  });
+});
+
+describe('old-shape → notations: migration', () => {
+  // A pre-migration document: `mathml:` list + scalar `tex:` + a legacy free-text `notation:` sketch.
+  const oldShape = [
+    'concepts:',
+    '  - title: Open Concepts',
+    '    intents:',
+    '      - concept: additive-inverse',
+    '        arity: 1',
+    '        en: additive inverse of $x',
+    '        tex: "-\\\\arg{x}{n}"',
+    '        mathml:',
+    '          - "<math><mo>−</mo><mi arg=\'x\' intent=\'additive-inverse($x)\'>n</mi></math>"',
+    '      - concept: average',
+    '        arity: 1',
+    '        notation: sigma (n) / n', // legacy free-text key — NOT a rendering; must survive untouched
+    '        mathml:',
+    '          - "<math><mi>avg</mi></math>"',
+    '          - "<math><mover><mi>x</mi><mo>‾</mo></mover></math>"',
+    '',
+  ].join('\n');
+
+  it('parse → serialize converts to the notations: shape, preserving legacy keys', () => {
+    const migrated = serializeConcepts(parseDictionary(oldShape));
+    const doc = parse(migrated) as {
+      concepts: Array<{ intents: Array<Record<string, unknown>> }>;
+    };
+    const [inv, avg] = doc.concepts[0].intents;
+    expect(inv.notations).toEqual([
+      { tex: '-\\arg{x}{n}', mathml: "<math><mo>−</mo><mi arg='x' intent='additive-inverse($x)'>n</mi></math>" },
+    ]);
+    expect('mathml' in inv).toBe(false);
+    expect('tex' in inv).toBe(false);
+    expect(avg.notations).toEqual([
+      { mathml: '<math><mi>avg</mi></math>' },
+      { mathml: '<math><mover><mi>x</mi><mo>‾</mo></mover></math>' },
+    ]);
+    expect(avg.notation).toBe('sigma (n) / n'); // the legacy sketch round-trips via raw
+  });
+
+  it('the migrated output is byte-stable (the one-time migration is idempotent)', () => {
+    const once = serializeConcepts(parseDictionary(oldShape));
     const twice = serializeConcepts(parseDictionary(once));
     expect(twice).toBe(once);
   });

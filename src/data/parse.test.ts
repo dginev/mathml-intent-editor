@@ -23,9 +23,28 @@ describe('parseDictionary (W3C open.yml schema)', () => {
     expect(ab.arity).toBe(0);
     expect(ab.property).toBe('symbol');
     expect(ab.area).toBe('category theory');
-    expect(ab.mathml).toEqual(["<math><mi intent='abelian-category'>Ab</mi></math>"]);
+    // The old `mathml:` list reads into the notations model (one entry per rendering).
+    expect(ab.notations).toEqual([{ mathml: "<math><mi intent='abelian-category'>Ab</mi></math>" }]);
     expect(ab.links).toEqual(['https://example.org/a']); // urls → links
     expect(concepts[1].alias).toEqual(['exponentiation']);
+  });
+
+  it('reads the new notations: shape — a list of {tex?, mathml} hashes', () => {
+    const yaml = w3cYaml([
+      {
+        concept: 'power',
+        arity: 2,
+        notations: [
+          { tex: '\\arg{b}{x}^{\\arg{e}{n}}', mathml: "<msup intent='power($b,$e)'><mi>x</mi><mi>n</mi></msup>" },
+          { mathml: '<mrow><mi>pow</mi></mrow>' }, // raw-MathML-authored extra: no tex
+        ],
+      },
+    ]);
+    const [c] = parseDictionary(yaml);
+    expect(c.notations).toEqual([
+      { tex: '\\arg{b}{x}^{\\arg{e}{n}}', mathml: "<msup intent='power($b,$e)'><mi>x</mi><mi>n</mi></msup>" },
+      { mathml: '<mrow><mi>pow</mi></mrow>' },
+    ]);
   });
 
   it('collects non-en ISO 639-1 keys into speech, leaving en and unmodeled keys alone', () => {
@@ -54,10 +73,15 @@ describe('parseDictionary (W3C open.yml schema)', () => {
     expect(c.alias).toEqual(['ex', 'eks']);
   });
 
-  it('reads the persisted tex source into Concept.tex', () => {
-    const yaml = w3cYaml([{ concept: 'additive-inverse', arity: 1, tex: '-\\arg{x}{n}' }]);
+  it('pairs an old-shape scalar tex: onto the first notation', () => {
+    const yaml = w3cYaml([
+      { concept: 'additive-inverse', arity: 1, tex: '-\\arg{x}{n}', mathml: ['<math><mi>-n</mi></math>'] },
+    ]);
     const [c] = parseDictionary(yaml);
-    expect(c.tex).toBe('-\\arg{x}{n}');
+    expect(c.notations).toEqual([{ tex: '-\\arg{x}{n}', mathml: '<math><mi>-n</mi></math>' }]);
+    // …and a (degenerate) tex with no mathml still survives the read.
+    const [bare] = parseDictionary(w3cYaml([{ concept: 'x', tex: '\\mathrm{x}' }]));
+    expect(bare.notations).toEqual([{ tex: '\\mathrm{x}', mathml: '' }]);
   });
 
   it('keeps the original entry in raw for lossless round-trip', () => {

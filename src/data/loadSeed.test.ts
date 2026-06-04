@@ -42,7 +42,7 @@ describe('loadSeed', () => {
 
     // A scalar `mathml` becomes a one-element array; empty `area` becomes undefined.
     const ab = concepts.find((c) => c.slug === 'abelian-category')!;
-    expect(ab.mathml).toEqual(["<math><mi intent='abelian-category'>Ab</mi></math>"]);
+    expect(ab.notations).toEqual([{ mathml: "<math><mi intent='abelian-category'>Ab</mi></math>" }]);
     expect(ab.area).toBeUndefined();
     expect(ab.links).toEqual([]);
   });

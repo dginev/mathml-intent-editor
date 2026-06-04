@@ -22,8 +22,10 @@ function setOrDelete(e: Record<string, unknown>, key: string, value: unknown): v
  * entries. We start from each concept's preserved `raw` so unmodeled fields (`property`, `arity`,
  * `notation*`, `comments`, key order) round-trip untouched, then overlay the modeled fields.
  *
- * The editor-authored `tex` IS written (as `tex:`) when present, so the TeX source is preserved in the
- * file and re-edits reopen it. (This adds a field to the shared file — a W3C-format change to socialize.)
+ * Renderings are written **only** in the `notations:` shape — a list of `{tex?, mathml}` hashes,
+ * `tex:` first (the source above its rendering) — and the pre-migration `mathml:`/`tex:` keys are
+ * dropped from `raw` on write, so a migrated entry never carries both generations. (A shared-format
+ * change socialized with the W3C group; the parser still reads the old shape.)
  *
  * Adding/removing a modeled field touches four sites that must stay in sync: this writer, `parse.ts`
  * (the reader), `reconcile.ts::contentKey` (diff identity), and `Concept` in `types.ts` (the shape).
@@ -58,10 +60,17 @@ export function serializeConcepts(concepts: Concept[]): string {
     }
     setOrDelete(e, 'property', c.property);
     setOrDelete(e, 'area', c.area);
-    setOrDelete(e, 'mathml', c.mathml);
+    // Renderings: the new `notations:` list replaces the old `mathml:` list + scalar `tex:` — drop
+    // those raw keys so an entry parsed from a pre-migration file doesn't keep both shapes.
+    delete e.mathml;
+    delete e.tex;
+    setOrDelete(
+      e,
+      'notations',
+      c.notations.map((n) => (n.tex !== undefined ? { tex: n.tex, mathml: n.mathml } : { mathml: n.mathml })),
+    );
     setOrDelete(e, 'urls', c.links);
     setOrDelete(e, 'alias', c.alias);
-    setOrDelete(e, 'tex', c.tex); // preserve the editor's TeX source when present
     return e;
   });
   // lineWidth: 0 disables line wrapping — long URLs/MathML stay on one line, so editing one entry

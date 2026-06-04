@@ -614,31 +614,23 @@
   box-sizing: border-box;
 }
 
-/* Additional notations: a raw-MathML textarea beside its live preview, one per extra rendering. */
+/* Additional notations: each extra is a full authoring block — the same stacked structure as the
+   primary (mode toggle, full-width source line, then the two-panel preview line). */
 .notation-list {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
-.notation-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.6rem;
+.notation-list .notation-block {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem 0;
 }
-.notation-row .extra-notation {
-  flex: 1;
-  min-width: 0;
+.notation-list .notation-block .previews {
+  margin-top: 0.6rem;
 }
-.notation-row .extra-preview {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  overflow: auto;
-  padding: 0.25rem 0;
-}
-.notation-row .icon-btn {
-  flex: none;
+.notation-block .remove-notation {
+  margin-left: auto;
   border: 0;
   background: none;
   color: var(--text-muted);
@@ -648,7 +640,7 @@
   padding: 0.2rem 0.3rem;
   border-radius: 4px;
 }
-.notation-row .icon-btn:hover {
+.notation-block .remove-notation:hover {
   color: var(--text);
   background: var(--hover);
 }
@@ -1049,10 +1041,18 @@
   font-weight: 600;
 }
 
+/* Pinned to the modal's bottom edge while the (tall) editor body scrolls — Done/Cancel always
+   reachable. `.danger` (Delete) carries margin-left:auto, parking the destructive action on the
+   far side of the bar. Negative margins span the modal's padding so content scrolls under cleanly. */
 .notation-editor .actions {
+  position: sticky;
+  bottom: 0;
   display: flex;
   gap: 0.5rem;
-  margin-top: 1rem;
+  margin: 1rem -1.25rem -1rem; /* negative: span/cancel the modal's 1rem/1.25rem padding */
+  padding: 0.6rem 1.25rem;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
 }
 
 .notation-editor .actions button {

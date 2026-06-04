@@ -47,6 +47,9 @@ export default function App() {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const saveDialogRef = useRef<HTMLDialogElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
+  // Whether the open editor holds unsaved changes (reported by NotationEditor) — dismissing the modal
+  // via backdrop/Esc then asks before discarding. A ref: it must not re-render App on every keystroke.
+  const editorDirty = useRef(false);
   useGlobalFindShortcut(filterRef); // Ctrl/⌘+F focuses the (whole-dictionary) Filter
 
   // Reflect the filter into the URL (`?filter=…`) so it's shareable/deep-linkable, preserving any other
@@ -172,13 +175,20 @@ export default function App() {
   const openCreate = useCallback(() => {
     if (!gated()) return;
     setCreating(true);
-    setEditing({ slug: '', mathml: [], links: [], alias: [] });
+    setEditing({ slug: '', notations: [], links: [], alias: [] });
   }, [gated]);
 
   const closeModal = useCallback(() => {
+    editorDirty.current = false;
     setEditing(null);
     setCreating(false);
   }, []);
+
+  /** Backdrop/Esc dismissal: silently fine when clean, but unsaved edits ask before being discarded. */
+  const confirmDiscard = useCallback(
+    () => !editorDirty.current || window.confirm('Discard your unsaved changes to this concept?'),
+    [],
+  );
 
   // "Done" — apply the edit/addition to the working set (batched); the global Save submits later.
   const handleSave = useCallback(
@@ -431,8 +441,11 @@ export default function App() {
         className="modal"
         aria-label={editing ? (creating ? 'Add concept' : `Edit notation: ${editing.slug}`) : undefined}
         onClose={closeModal}
+        onCancel={(e) => {
+          if (!confirmDiscard()) e.preventDefault(); // Esc with unsaved edits → keep the modal open
+        }}
         onClick={(e) => {
-          if (e.target === dialogRef.current) closeModal(); // backdrop click
+          if (e.target === dialogRef.current && confirmDiscard()) closeModal(); // backdrop click
         }}
       >
         {editing && (
@@ -442,6 +455,7 @@ export default function App() {
               onSave={handleSave}
               onDelete={creating ? undefined : handleDelete} // nothing to delete for a brand-new row
               onCancel={closeModal}
+              onDirtyChange={(d) => (editorDirty.current = d)}
               knownSlugs={knownSlugs}
               index={conceptIndex}
             />

@@ -11,12 +11,25 @@ export type EditCache = Record<string, EditRecord>;
 
 const KEY = 'intent-editor.edits';
 
+/** A cached Concept must carry the current `notations` model (an older cache held `mathml`/`tex`). */
+const currentShape = (c: Concept | null): boolean => c === null || Array.isArray(c.notations);
+
 export function loadEdits(storage: Storage): EditCache {
   const raw = storage.getItem(KEY);
   if (!raw) return {};
   try {
     const parsed = JSON.parse(raw) as EditCache;
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    if (!parsed || typeof parsed !== 'object') return {};
+    // A cache written before the `notations:` model is simply discarded (prototype decision: no
+    // migration) — otherwise the reducer would ingest stale-shaped values.
+    const stale = Object.values(parsed).some(
+      (r) => !r || !currentShape(r.value) || !currentShape(r.baseAtEdit),
+    );
+    if (stale) {
+      storage.removeItem(KEY);
+      return {};
+    }
+    return parsed;
   } catch {
     return {};
   }

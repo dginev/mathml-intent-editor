@@ -15,7 +15,7 @@ beforeAll(() => {
 const concept = (slug: string, extra: Partial<Concept> = {}): Concept => ({
   slug,
   en: `speech for ${slug}`,
-  mathml: [],
+  notations: [],
   links: [],
   alias: [],
   ...extra,

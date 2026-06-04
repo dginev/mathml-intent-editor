@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // The component loads Temml via `?url` + dynamic import, which only works in the browser bundle.
@@ -13,12 +13,12 @@ import { buildConceptIndex } from '../data/conceptIndex';
 import type { Concept } from '../types';
 
 const index = buildConceptIndex([
-  { slug: 'union', arity: 2, area: 'set theory', alias: ['cup'], mathml: [], links: [] },
-  { slug: 'disjoint-union', arity: 2, area: 'set theory', mathml: [], links: [], alias: [] },
-  { slug: 'power', arity: 2, alias: ['exponentiation'], mathml: [], links: [] },
+  { slug: 'union', arity: 2, area: 'set theory', alias: ['cup'], notations: [], links: [] },
+  { slug: 'disjoint-union', arity: 2, area: 'set theory', notations: [], links: [], alias: [] },
+  { slug: 'power', arity: 2, alias: ['exponentiation'], notations: [], links: [] },
 ]);
 
-const blank: Concept = { slug: '', mathml: [], links: [], alias: [] };
+const blank: Concept = { slug: '', notations: [], links: [], alias: [] };
 
 const base: Concept = {
   slug: 'additive-inverse',
@@ -26,7 +26,7 @@ const base: Concept = {
   area: 'algebra',
   arity: 1,
   property: 'prefix',
-  mathml: ['<math><mi>old</mi></math>'],
+  notations: [{ mathml: '<math><mi>old</mi></math>' }],
   links: ['https://example.org/a'],
   alias: [],
 };
@@ -54,8 +54,8 @@ describe('NotationEditor', () => {
 
     expect(onSave).toHaveBeenCalledTimes(1);
     const c = onSave.mock.calls[0][0] as Concept;
-    expect(c.mathml[0]).toContain('intent="additive-inverse($x)"');
-    expect(c.tex).toBe('-\\arg{x}{n}');
+    expect(c.notations[0].mathml).toContain('intent="additive-inverse($x)"');
+    expect(c.notations[0].tex).toBe('-\\arg{x}{n}');
     expect(c.arity).toBe(1); // other fields carried through
   });
 
@@ -70,7 +70,7 @@ describe('NotationEditor', () => {
 
     const c = onSave.mock.calls[0][0] as Concept;
     expect(c.en).toBe('the additive inverse of $x');
-    expect(c.mathml).toEqual(base.mathml); // notation untouched (TeX left blank)
+    expect(c.notations).toEqual(base.notations); // notation untouched (TeX left blank)
   });
 
   it('adds a second language and splits it into Concept.speech on save', () => {
@@ -99,7 +99,7 @@ describe('NotationEditor', () => {
 
   it('warns when a notation argument is never used in the speech', async () => {
     // speech says "$x" but the notation also marks arg="y", which no template references
-    const c: Concept = { ...base, mathml: ["<math><mi arg='x'>n</mi><mi arg='y'>m</mi></math>"] };
+    const c: Concept = { ...base, notations: [{ mathml: "<math><mi arg='x'>n</mi><mi arg='y'>m</mi></math>" }] };
     render(<NotationEditor concept={c} onSave={vi.fn()} />);
     expect(await screen.findByTestId('unused-warning')).toHaveTextContent('arg="y"');
   });
@@ -124,38 +124,104 @@ describe('NotationEditor', () => {
     expect(onDelete).toHaveBeenCalledTimes(1);
   });
 
-  it('edits an additional notation (mathml[1..]) and saves all renderings', () => {
+  it('edits a raw-MathML extra notation and saves all renderings (verbatim, no tex key)', () => {
     const onSave = vi.fn();
     const c: Concept = {
       ...base,
-      mathml: ['<math><mi>p</mi></math>', "<math><msub><mi>ad</mi><mi arg='a1'>f</mi></msub></math>"],
+      notations: [
+        { mathml: '<math><mi>p</mi></math>' },
+        { mathml: "<math><msub><mi>ad</mi><mi arg='a1'>f</mi></msub></math>" },
+      ],
     };
     render(<NotationEditor concept={c} onSave={onSave} />);
-    const extra = screen.getByLabelText('Additional MathML') as HTMLTextAreaElement;
-    expect(extra.value).toBe("<math><msub><mi>ad</mi><mi arg='a1'>f</mi></msub></math>"); // seeded
+    // A tex-less extra opens in Raw MathML mode, seeded with its stored rendering.
+    const block = screen.getByTestId('extra-notation');
+    const extra = within(block).getByTestId('extra-notation-mathml') as HTMLTextAreaElement;
+    expect(extra.value).toBe("<math><msub><mi>ad</mi><mi arg='a1'>f</mi></msub></math>");
     fireEvent.change(extra, {
       target: { value: "<math><msub><mi>ad</mi><mi arg='g'>f</mi></msub></math>" },
     });
     fireEvent.click(screen.getByTestId('save'));
     const saved = onSave.mock.calls[0][0] as Concept;
-    expect(saved.mathml).toEqual([
-      '<math><mi>p</mi></math>',
-      "<math><msub><mi>ad</mi><mi arg='g'>f</mi></msub></math>",
+    expect(saved.notations).toEqual([
+      { mathml: '<math><mi>p</mi></math>' },
+      { mathml: "<math><msub><mi>ad</mi><mi arg='g'>f</mi></msub></math>" },
     ]);
   });
 
-  it('adds an additional notation and blocks saving while it is malformed', () => {
+  it('gives each extra notation its own TeX / Raw MathML toggle', () => {
+    render(<NotationEditor concept={base} onSave={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '+ Add notation' }));
+    const block = screen.getByTestId('extra-notation');
+    expect(within(block).getByRole('tab', { name: 'TeX' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(within(block).getByRole('tab', { name: 'Raw MathML' }));
+    expect(within(block).getByTestId('extra-notation-mathml')).toBeInTheDocument();
+    // …without touching the primary's mode.
+    expect(screen.getByTestId('tex-input')).toBeInTheDocument();
+  });
+
+  it('authors a TeX extra: saves {tex, mathml} with the minified rendering', async () => {
     const onSave = vi.fn();
     render(<NotationEditor concept={base} onSave={onSave} />);
     fireEvent.click(screen.getByRole('button', { name: '+ Add notation' }));
-    const extra = screen.getByLabelText('Additional MathML');
-    fireEvent.change(extra, { target: { value: '<math><mo>+' } }); // malformed
-    expect(screen.getByTestId('save')).toBeDisabled();
-    fireEvent.change(extra, { target: { value: '<math><mo>+</mo></math>' } }); // fixed
-    expect(screen.getByTestId('save')).toBeEnabled();
+    const block = screen.getByTestId('extra-notation');
+    fireEvent.change(within(block).getByTestId('extra-notation-tex'), {
+      target: { value: '-\\arg{x}{n}' },
+    });
+    await waitFor(() => expect(screen.getByTestId('save')).toBeEnabled());
     fireEvent.click(screen.getByTestId('save'));
     const saved = onSave.mock.calls[0][0] as Concept;
-    expect(saved.mathml).toEqual(['<math><mi>old</mi></math>', '<math><mo>+</mo></math>']);
+    expect(saved.notations[1].tex).toBe('-\\arg{x}{n}');
+    expect(saved.notations[1].mathml).toContain('intent="additive-inverse($x)"');
+    expect(saved.notations[1].mathml).not.toContain('class='); // minified at the storage boundary
+  });
+
+  it('reopens a TeX-authored extra in TeX mode with its source', () => {
+    const c: Concept = {
+      ...base,
+      notations: [{ mathml: '<math><mi>p</mi></math>' }, { tex: '-\\arg{x}{n}', mathml: '<math><mi>-n</mi></math>' }],
+    };
+    render(<NotationEditor concept={c} onSave={vi.fn()} />);
+    const block = screen.getByTestId('extra-notation');
+    expect(within(block).getByRole('tab', { name: 'TeX' })).toHaveAttribute('aria-selected', 'true');
+    expect((within(block).getByTestId('extra-notation-tex') as HTMLTextAreaElement).value).toBe('-\\arg{x}{n}');
+  });
+
+  it('shows a broken extra notation error inline on ITS block and disables Done', async () => {
+    const onSave = vi.fn();
+    render(<NotationEditor concept={base} onSave={onSave} />);
+    fireEvent.click(screen.getByRole('button', { name: '+ Add notation' }));
+    fireEvent.click(screen.getByRole('button', { name: '+ Add notation' }));
+    const blocks = screen.getAllByTestId('extra-notation');
+    // Break only the SECOND extra (raw mode, malformed XML).
+    fireEvent.click(within(blocks[1]).getByRole('tab', { name: 'Raw MathML' }));
+    fireEvent.change(within(blocks[1]).getByTestId('extra-notation-mathml'), {
+      target: { value: '<math><mo>+' },
+    });
+    expect(within(blocks[1]).getByTestId('extra-notation-error')).toBeInTheDocument();
+    expect(within(blocks[0]).queryByTestId('extra-notation-error')).toBeNull(); // not the first
+    expect(screen.getByTestId('save')).toBeDisabled();
+    // Fixing it re-enables Done and the fixed value is saved verbatim.
+    fireEvent.change(within(blocks[1]).getByTestId('extra-notation-mathml'), {
+      target: { value: '<math><mo>+</mo></math>' },
+    });
+    await waitFor(() => expect(screen.getByTestId('save')).toBeEnabled());
+    fireEvent.click(screen.getByTestId('save'));
+    const saved = onSave.mock.calls[0][0] as Concept;
+    expect(saved.notations).toEqual([
+      { mathml: '<math><mi>old</mi></math>' },
+      { mathml: '<math><mo>+</mo></math>' },
+    ]);
+  });
+
+  it('reports content dirtiness (and edit-then-revert returns clean)', () => {
+    const onDirtyChange = vi.fn();
+    render(<NotationEditor concept={base} onSave={vi.fn()} onDirtyChange={onDirtyChange} />);
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false); // pristine on open
+    fireEvent.change(screen.getByTestId('slug-input'), { target: { value: 'renamed' } });
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    fireEvent.change(screen.getByTestId('slug-input'), { target: { value: base.slug } });
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false); // reverted → clean again
   });
 
   it('authors raw MathML (seeded with the current) and clears tex', () => {
@@ -167,8 +233,7 @@ describe('NotationEditor', () => {
     fireEvent.change(raw, { target: { value: '<math><mi intent="x">Z</mi></math>' } });
     fireEvent.click(screen.getByTestId('save'));
     const c = onSave.mock.calls[0][0] as Concept;
-    expect(c.mathml[0]).toBe('<math><mi intent="x">Z</mi></math>');
-    expect(c.tex).toBeUndefined();
+    expect(c.notations[0]).toEqual({ mathml: '<math><mi intent="x">Z</mi></math>' }); // no tex key
   });
 
   it('toggles the macro legend with the info button (hidden by default)', () => {
@@ -187,7 +252,7 @@ describe('NotationEditor', () => {
   });
 
   it('titles the editor "Add concept" for a brand-new (slug-less) row', () => {
-    render(<NotationEditor concept={{ slug: '', mathml: [], links: [], alias: [] }} onSave={vi.fn()} />);
+    render(<NotationEditor concept={{ slug: '', notations: [], links: [], alias: [] }} onSave={vi.fn()} />);
     expect(screen.getByRole('heading')).toHaveTextContent('Add concept');
   });
 

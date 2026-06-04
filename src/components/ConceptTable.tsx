@@ -222,10 +222,13 @@ export function ConceptTable({
   speechLang?: string;
   onSpeechLangChange?: (lang: string) => void;
 }) {
-  // Lazily load Temml only when some row actually has `tex` to re-render (the seed/e2e data has none, so
-  // the perf path never pulls Temml). Cells render the stored mathml until the engine resolves.
+  // Lazily load Temml only when some row's primary notation has `tex` to re-render (the seed/e2e data
+  // has none, so the perf path never pulls Temml). Cells render the stored mathml until the engine resolves.
   const [engine, setEngine] = useState<TemmlEngine | null>(null);
-  const needsEngine = useMemo(() => data.some((c) => c.tex != null && c.tex.trim() !== ''), [data]);
+  const needsEngine = useMemo(
+    () => data.some((c) => c.notations[0]?.tex != null && c.notations[0].tex.trim() !== ''),
+    [data],
+  );
   useEffect(() => {
     if (!needsEngine || engine) return;
     let live = true;

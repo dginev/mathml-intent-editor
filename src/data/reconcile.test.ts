@@ -6,7 +6,7 @@ const c = (slug: string, mathml: string): Concept => ({
   slug,
   en: undefined,
   area: undefined,
-  mathml: [mathml],
+  notations: [{ mathml }],
   links: [],
   alias: [],
 });
@@ -19,26 +19,26 @@ describe('threeWayMerge', () => {
     const ours = map(c('a', '1')); // unchanged by user
     const theirs = map(c('a', '2')); // base advanced
     const { merged, conflicts } = threeWayMerge(ancestor, ours, theirs);
-    expect(merged['a'].mathml).toEqual(['2']);
+    expect(merged['a'].notations).toEqual([{ mathml: '2' }]);
     expect(conflicts).toEqual([]);
   });
 
   it('keeps the user edit when only the user changed a concept', () => {
     const r = threeWayMerge(map(c('a', '1')), map(c('a', 'mine')), map(c('a', '1')));
-    expect(r.merged['a'].mathml).toEqual(['mine']);
+    expect(r.merged['a'].notations).toEqual([{ mathml: 'mine' }]);
     expect(r.conflicts).toEqual([]);
   });
 
   it('flags a conflict when base and the user both changed the same concept differently', () => {
     const r = threeWayMerge(map(c('a', '1')), map(c('a', 'mine')), map(c('a', 'theirs')));
     expect(r.conflicts).toEqual(['a']);
-    expect(r.merged['a'].mathml).toEqual(['mine']); // ours wins in the merged view; surfaced as conflict
+    expect(r.merged['a'].notations).toEqual([{ mathml: 'mine' }]); // ours wins in the merged view; surfaced as conflict
   });
 
   it('does not conflict when both sides made the identical change', () => {
     const r = threeWayMerge(map(c('a', '1')), map(c('a', '2')), map(c('a', '2')));
     expect(r.conflicts).toEqual([]);
-    expect(r.merged['a'].mathml).toEqual(['2']);
+    expect(r.merged['a'].notations).toEqual([{ mathml: '2' }]);
   });
 
   it('includes concepts newly added on either side', () => {
@@ -55,6 +55,6 @@ describe('threeWayMerge', () => {
 
   it('keeps an untouched concept present everywhere', () => {
     const r = threeWayMerge(map(c('a', '1')), map(c('a', '1')), map(c('a', '1')));
-    expect(r.merged['a'].mathml).toEqual(['1']);
+    expect(r.merged['a'].notations).toEqual([{ mathml: '1' }]);
   });
 });

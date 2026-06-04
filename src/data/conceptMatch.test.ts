@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { conceptMatches, matchRank } from './conceptMatch';
 import type { Concept } from '../types';
 
-const c = (o: Partial<Concept>): Concept => ({ slug: '', mathml: [], links: [], alias: [], ...o });
+const c = (o: Partial<Concept>): Concept => ({ slug: '', notations: [], links: [], alias: [], ...o });
 
 describe('matchRank', () => {
   it('ranks by the matched cell: concept(0) < speech(1) < area(2) < alias(3); -1 = no match', () => {

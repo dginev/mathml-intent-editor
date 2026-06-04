@@ -4,7 +4,7 @@ import type { Concept } from '../types';
 
 const c = (slug: string, extra: Partial<Concept> = {}): Concept => ({
   slug,
-  mathml: [],
+  notations: [],
   links: [],
   alias: [],
   ...extra,

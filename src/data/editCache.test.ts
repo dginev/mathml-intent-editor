@@ -20,7 +20,7 @@ const c = (slug: string, mathml: string): Concept => ({
   slug,
   en: undefined,
   area: undefined,
-  mathml: [mathml],
+  notations: [{ mathml }],
   links: [],
   alias: [],
 });
@@ -30,8 +30,8 @@ describe('editCache', () => {
     const s = fakeStorage();
     recordEdit(s, 'power#', c('power', 'v2'), c('power', 'v1'));
     const edits = loadEdits(s);
-    expect(edits['power#'].value?.mathml).toEqual(['v2']);
-    expect(edits['power#'].baseAtEdit?.mathml).toEqual(['v1']);
+    expect(edits['power#'].value?.notations).toEqual([{ mathml: 'v2' }]);
+    expect(edits['power#'].baseAtEdit?.notations).toEqual([{ mathml: 'v1' }]);
   });
 
   it('keeps the ORIGINAL baseAtEdit when the same row is edited again', () => {
@@ -39,15 +39,15 @@ describe('editCache', () => {
     recordEdit(s, 'power#', c('power', 'v2'), c('power', 'v1'));
     recordEdit(s, 'power#', c('power', 'v3'), c('power', 'v2-upstream')); // later base differs
     const edits = loadEdits(s);
-    expect(edits['power#'].value?.mathml).toEqual(['v3']); // latest user value
-    expect(edits['power#'].baseAtEdit?.mathml).toEqual(['v1']); // original fork point preserved
+    expect(edits['power#'].value?.notations).toEqual([{ mathml: 'v3' }]); // latest user value
+    expect(edits['power#'].baseAtEdit?.notations).toEqual([{ mathml: 'v1' }]); // original fork point preserved
   });
 
   it('records a deletion as a null value (tombstone)', () => {
     const s = fakeStorage();
     recordEdit(s, 'power#', null, c('power', 'v1'));
     expect(loadEdits(s)['power#'].value).toBeNull();
-    expect(loadEdits(s)['power#'].baseAtEdit?.mathml).toEqual(['v1']);
+    expect(loadEdits(s)['power#'].baseAtEdit?.notations).toEqual([{ mathml: 'v1' }]);
   });
 
   it('keeps overloaded ids (same name, different arity) as separate entries', () => {
@@ -62,5 +62,21 @@ describe('editCache', () => {
     expect(loadEdits(s)).toEqual({});
     s.setItem('intent-editor.edits', 'not json');
     expect(loadEdits(s)).toEqual({});
+  });
+
+  it('clears a stale pre-notations cache (prototype: no migration, just a clean discard)', () => {
+    const s = fakeStorage();
+    // An old-shape cached edit: Concept values carrying mathml[]/tex instead of notations.
+    s.setItem(
+      'intent-editor.edits',
+      JSON.stringify({
+        'power#2': {
+          value: { slug: 'power', mathml: ['<math/>'], tex: 'x^n', links: [], alias: [] },
+          baseAtEdit: null,
+        },
+      }),
+    );
+    expect(loadEdits(s)).toEqual({}); // stale shape → discarded…
+    expect(s.getItem('intent-editor.edits')).toBeNull(); // …and removed from storage
   });
 });

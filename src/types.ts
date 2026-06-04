@@ -8,6 +8,15 @@
 /** A localized speech template, keyed by an ISO 639-1 language code (e.g. `de`, `fr`). */
 export type SpeechEntry = { lang: string; text: string };
 
+/**
+ * One example rendering of a concept (an item of the `notations:` list). `mathml` is the stored,
+ * canonical form — a full `<math>…</math>` carrying `intent=`/`arg=` annotations. `tex` is present
+ * only when the rendering was authored in TeX (the editor re-renders the rich display from it and
+ * reopens it on re-edit); a raw-MathML-authored rendering has no `tex`. The author writes one *or*
+ * the other — we always store the MathML.
+ */
+export type Notation = { mathml: string; tex?: string };
+
 export type Concept = {
   /** kebab-case identifier (the `concept:` key). Unique per dictionary. */
   slug: string;
@@ -24,18 +33,16 @@ export type Concept = {
   arity?: number;
   /** Notation form, e.g. "symbol", "indexed", "prefix", "function". */
   property?: string;
-  /** Example renderings as full `<math>…</math>` strings, carrying `intent=`/`arg=` annotations. */
-  mathml: string[];
+  /**
+   * Example renderings (the `notations:` list; `notations[0]` is the primary one shown in the table).
+   * Replaces the older `mathml:` list + scalar `tex:` pair — the parser still reads that shape, the
+   * serializer emits only this one.
+   */
+  notations: Notation[];
   /** Reference URLs (the `urls:` key). */
   links: string[];
   /** Alternate names/slugs. */
   alias: string[];
-  /**
-   * Editor-authored TeX source for the primary notation. Persisted to `open.yml` as `tex:` (when
-   * present) so re-editing reopens the original source; round-trips via parse/serialize. Absent for
-   * entries that have no TeX (e.g. hand-authored MathML).
-   */
-  tex?: string;
   /** The original YAML entry, preserved so serialization round-trips fields we don't model. */
   raw?: Record<string, unknown>;
 };
