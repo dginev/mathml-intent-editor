@@ -4,7 +4,7 @@ A web app for open community curation (add / edit / remove) of the *Intent Open*
 
 Use live at:
 
-https://dginev.github.io/mathml-intent-editor/
+https://dginev.github.io/mathml-intent-open-editor/
 
 ## Tech stack
 
