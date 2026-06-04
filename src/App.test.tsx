@@ -144,10 +144,16 @@ describe('App (integration: save/branch flow)', () => {
     render(<App />);
 
     // Open the editor on the row, make no change, backdrop-click → closes without any prompt.
+    // (jsdom rects are 0×0, so any nonzero coordinates count as outside the dialog's box; a true
+    // backdrop dismissal needs BOTH the press and the click outside — see App's isBackdropClick.)
     fireEvent.click(await screen.findByLabelText('Edit power'));
     await screen.findByTestId('notation-editor');
     const dialog = () => document.querySelector('dialog.modal') as HTMLDialogElement;
-    fireEvent.click(dialog());
+    const backdropClick = () => {
+      fireEvent.mouseDown(dialog(), { clientX: 999, clientY: 999 });
+      fireEvent.click(dialog(), { clientX: 999, clientY: 999 });
+    };
+    backdropClick();
     await waitFor(() => expect(screen.queryByTestId('notation-editor')).toBeNull());
     expect(confirmSpy).not.toHaveBeenCalled();
 
@@ -155,13 +161,19 @@ describe('App (integration: save/branch flow)', () => {
     fireEvent.click(await screen.findByLabelText('Edit power'));
     await screen.findByTestId('notation-editor');
     fireEvent.change(screen.getByTestId('slug-input'), { target: { value: 'power-renamed' } });
-    fireEvent.click(dialog());
+    backdropClick();
     expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('notation-editor')).toBeInTheDocument();
+
+    // A click that targets the dialog WITHOUT a press outside (padding/scrollbar/drag-out) never
+    // dismisses — and never prompts.
+    fireEvent.click(dialog(), { clientX: 999, clientY: 999 }); // no preceding outside mousedown
+    expect(confirmSpy).toHaveBeenCalledTimes(1); // unchanged
     expect(screen.getByTestId('notation-editor')).toBeInTheDocument();
 
     // Accepting the prompt discards and closes.
     confirmSpy.mockReturnValue(true);
-    fireEvent.click(dialog());
+    backdropClick();
     await waitFor(() => expect(screen.queryByTestId('notation-editor')).toBeNull());
     confirmSpy.mockRestore();
   });

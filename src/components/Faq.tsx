@@ -1,5 +1,11 @@
 import { useEffect, useRef } from 'react';
 
+/** Outside the dialog's box — `target === dialog` alone also matches its own padding/scrollbar. */
+const outsideBox = (e: { clientX: number; clientY: number }, d: HTMLElement) => {
+  const r = d.getBoundingClientRect();
+  return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+};
+
 /**
  * The sign-in / permissions FAQ — a native <dialog> (same pattern as the editor modals) opened from
  * the header's "FAQ" link. Spells out exactly what the GitHub sign-in grants (identity only) and how
@@ -7,6 +13,7 @@ import { useEffect, useRef } from 'react';
  */
 export function Faq({ open, onClose }: { open: boolean; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const pressOutside = useRef(false); // backdrop dismissal needs press AND release outside the box
 
   useEffect(() => {
     const d = ref.current;
@@ -22,8 +29,13 @@ export function Faq({ open, onClose }: { open: boolean; onClose: () => void }) {
       data-testid="faq"
       aria-label="Frequently asked questions"
       onClose={onClose}
+      onMouseDown={(e) => {
+        pressOutside.current = !!ref.current && e.target === ref.current && outsideBox(e, ref.current);
+      }}
       onClick={(e) => {
-        if (e.target === ref.current) onClose(); // backdrop click
+        const pressed = pressOutside.current;
+        pressOutside.current = false;
+        if (pressed && ref.current && e.target === ref.current && outsideBox(e, ref.current)) onClose();
       }}
     >
       <div className="faq">

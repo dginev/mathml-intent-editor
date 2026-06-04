@@ -52,6 +52,24 @@ export default function App() {
   // Whether the open editor holds unsaved changes (reported by NotationEditor) — dismissing the modal
   // via backdrop/Esc then asks before discarding. A ref: it must not re-render App on every keystroke.
   const editorDirty = useRef(false);
+  // True-backdrop detection: `e.target === dialog` alone is NOT a backdrop click — clicks on the
+  // dialog's own padding/scrollbar also target it, and a text-selection drag released outside
+  // synthesizes a click targeting it. A dismissal requires BOTH the press and the release to land
+  // geometrically outside the dialog's box.
+  const pressOutside = useRef(false);
+  const outsideBox = (e: { clientX: number; clientY: number }, d: HTMLElement) => {
+    const r = d.getBoundingClientRect();
+    return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+  };
+  const trackPress = (ref: React.RefObject<HTMLDialogElement | null>) => (e: React.MouseEvent) => {
+    pressOutside.current = !!ref.current && e.target === ref.current && outsideBox(e, ref.current);
+  };
+  /** True only for a full press-and-release on the real backdrop (then resets the press state). */
+  const isBackdropClick = (ref: React.RefObject<HTMLDialogElement | null>, e: React.MouseEvent) => {
+    const pressed = pressOutside.current;
+    pressOutside.current = false;
+    return pressed && !!ref.current && e.target === ref.current && outsideBox(e, ref.current);
+  };
   useGlobalFindShortcut(filterRef); // Ctrl/⌘+F focuses the (whole-dictionary) Filter
 
   // Reflect the filter into the URL (`?filter=…`) so it's shareable/deep-linkable, preserving any other
@@ -460,8 +478,9 @@ export default function App() {
         onCancel={(e) => {
           if (!confirmDiscard()) e.preventDefault(); // Esc with unsaved edits → keep the modal open
         }}
+        onMouseDown={trackPress(dialogRef)}
         onClick={(e) => {
-          if (e.target === dialogRef.current && confirmDiscard()) closeModal(); // backdrop click
+          if (isBackdropClick(dialogRef, e) && confirmDiscard()) closeModal();
         }}
       >
         {editing && (
@@ -485,8 +504,9 @@ export default function App() {
         className="modal save-modal"
         aria-label="Describe your changes"
         onClose={closeSavePrompt}
+        onMouseDown={trackPress(saveDialogRef)}
         onClick={(e) => {
-          if (e.target === saveDialogRef.current) closeSavePrompt();
+          if (isBackdropClick(saveDialogRef, e)) closeSavePrompt();
         }}
       >
         <div className="save-prompt">
