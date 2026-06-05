@@ -53,10 +53,11 @@ describe('ConceptTable speech-language dropdown', () => {
     concept('ratio'), // no bg template → falls back to English
   ];
 
-  it('renders a language select listing the languages present in the data', () => {
+  it('renders a "Speech hint" label with a language select under it, listing the data languages', () => {
     render(
       <ConceptTable data={bgData} total={2} languages={['en', 'bg']} speechLang="en" onSpeechLangChange={() => {}} />,
     );
+    expect(screen.getByText('Speech hint')).toBeInTheDocument(); // the column label, above the control
     const select = screen.getByRole('combobox', { name: 'Speech language' });
     const options = within(select).getAllByRole('option');
     expect(options.map((o) => (o as HTMLOptionElement).value)).toEqual(['en', 'bg']);
@@ -86,7 +87,28 @@ describe('ConceptTable speech-language dropdown', () => {
   it('renders a plain header when the data holds a single language', () => {
     render(<ConceptTable data={data} total={data.length} languages={['en']} speechLang="en" onSpeechLangChange={() => {}} />);
     expect(screen.queryByRole('combobox', { name: 'Speech language' })).toBeNull();
-    expect(screen.getByText('Speech (en)')).toBeInTheDocument();
+    expect(screen.getByText('Speech hint (en)')).toBeInTheDocument();
+  });
+});
+
+describe('ConceptTable column sizing & wrapping', () => {
+  it('widens the Concept column to fit the longest slug on screen', () => {
+    const long = concept('incomplete-elliptic-integral-of-the-second-kind'); // 48 chars — overflowed at 240px
+    render(<ConceptTable data={[long, ...data]} total={5} changeKind={changeKind} />);
+    const th = screen.getByText('Concept').closest('.th') as HTMLElement;
+    expect(parseInt(th.style.width, 10)).toBeGreaterThan(380);
+  });
+
+  it('keeps the default Concept width for short slugs', () => {
+    renderTable();
+    const th = screen.getByText('Concept').closest('.th') as HTMLElement;
+    expect(parseInt(th.style.width, 10)).toBe(240);
+  });
+
+  it('marks cells with a column-scoped class so the Speech cell can wrap', () => {
+    renderTable();
+    const cell = within(rowBySlug('alpha')).getByText('speech for alpha').closest('.td');
+    expect(cell).toHaveClass('col-speech');
   });
 });
 

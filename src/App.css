@@ -1152,11 +1152,29 @@
   opacity: 0.7;
 }
 
-/* Speech-column language dropdown — the header cell IS the control. Undo the header dimming on its
-   cell (a form control must keep its full contrast — WCAG 1.4.11) and let the select overflow. */
+/* Speech column header: the "Speech hint" label with the language dropdown on the line beneath.
+   Undo the header dimming on the cell (a form control must keep its full contrast — WCAG 1.4.11;
+   the label re-dims itself to match the other headers) and let the select overflow. */
 .th:has(.speech-lang) {
   opacity: 1;
   overflow: visible;
+}
+.speech-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.2rem 0;
+}
+.speech-head-label {
+  opacity: 0.7; /* match the dimming of the sibling column headers */
+}
+
+/* Speech templates can be long — wrap inside the cell instead of clipping; the dynamic row height
+   (measureElement) grows the row to fit, same as wrapping Links. */
+.td.col-speech {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .speech-lang {
   font: inherit;

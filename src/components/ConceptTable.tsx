@@ -61,30 +61,34 @@ const columns = [
   columnHelper.display({
     id: 'speech',
     size: 280,
-    // Header = a language dropdown over the languages present in the data (the visual label IS the
-    // control, hence the aria-label). With a single language (the seed/e2e path) it stays plain text.
+    // Header = the "Speech hint" column label with a language dropdown on the line beneath it (the
+    // dropdown covers the languages present in the data). With a single language (the seed/e2e path)
+    // it stays plain text.
     header: ({ table }) => {
       const meta = table.options.meta as TableMeta | undefined;
       const lang = meta?.speechLang ?? 'en';
       const languages = meta?.languages ?? ['en'];
       const onChange = meta?.onSpeechLangChange;
-      if (languages.length <= 1 || !onChange) return `Speech (${lang})`;
+      if (languages.length <= 1 || !onChange) return `Speech hint (${lang})`;
       // A ?lang= deep link may name a language absent from the data — keep the select consistent.
       const options = languages.includes(lang) ? languages : [...languages, lang];
       return (
-        <select
-          className="speech-lang"
-          aria-label="Speech language"
-          value={lang}
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          {options.map((l) => (
-            <option key={l} value={l}>
-              {langLabel(l)}
-            </option>
-          ))}
-        </select>
+        <span className="speech-head">
+          <span className="speech-head-label">Speech hint</span>
+          <select
+            className="speech-lang"
+            aria-label="Speech language"
+            value={lang}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => onChange(e.target.value)}
+          >
+            {options.map((l) => (
+              <option key={l} value={l}>
+                {langLabel(l)}
+              </option>
+            ))}
+          </select>
+        </span>
       );
     },
     // The selected language's template, carrying its `lang` attribute (screen-reader pronunciation).
@@ -229,10 +233,21 @@ export function ConceptTable({
     };
   }, [needsEngine, engine]);
 
+  // Concept column: wide enough for the longest slug on screen (canonical names run long —
+  // `incomplete-elliptic-integral-of-the-second-kind` is 48 chars and overflowed the fixed 240px).
+  // Estimated from character count (~8px/char at the cell's font), floored at the default, capped
+  // against pathological names.
+  const slugWidth = useMemo(() => {
+    let max = 0;
+    for (const c of data) if (c.slug.length > max) max = c.slug.length;
+    return Math.min(Math.max(240, max * 8 + 24), 560);
+  }, [data]);
+
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    state: { columnSizing: { slug: slugWidth } },
     meta: { onEdit, onDelete, changeKind, engine, languages, speechLang, onSpeechLangChange },
   });
 
@@ -281,7 +296,12 @@ export function ConceptTable({
           {table.getHeaderGroups().map((hg) => (
             <div className="tr" role="row" aria-rowindex={1} key={hg.id}>
               {hg.headers.map((h) => (
-                <div className="th" role="columnheader" key={h.id} style={{ width: h.getSize() }}>
+                <div
+                  className={`th col-${h.column.id}`}
+                  role="columnheader"
+                  key={h.id}
+                  style={{ width: h.getSize() }}
+                >
                   {flexRender(h.column.columnDef.header, h.getContext())}
                 </div>
               ))}
@@ -313,7 +333,12 @@ export function ConceptTable({
                 style={{ transform: `translateY(${vi.start}px)`, minHeight: ROW_HEIGHT }}
               >
                 {row.getVisibleCells().map((cell) => (
-                  <div className="td" role="cell" key={cell.id} style={{ width: cell.column.getSize() }}>
+                  <div
+                    className={`td col-${cell.column.id}`}
+                    role="cell"
+                    key={cell.id}
+                    style={{ width: cell.column.getSize() }}
+                  >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </div>
                 ))}
