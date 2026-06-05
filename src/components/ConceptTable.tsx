@@ -88,24 +88,15 @@ const columns = [
       );
     },
     // The selected language's template, carrying its `lang` attribute (screen-reader pronunciation).
-    // A row without that language falls back to its English template, visibly muted + explained by a
-    // title (so the fallback isn't signalled by style alone) — the column never goes blank.
+    // A row without that language shows an EMPTY cell (decision per @dginev) — untranslated entries
+    // are visible at a glance instead of being papered over with an English fallback.
     cell: ({ row, table }) => {
       const meta = table.options.meta as TableMeta | undefined;
       const lang = meta?.speechLang ?? 'en';
       const c = row.original;
       if (lang !== 'en') {
         const text = c.speech?.find((s) => s.lang === lang)?.text;
-        if (text != null && text.trim() !== '') return <span lang={lang}>{text}</span>;
-        return (
-          <span
-            className="speech-fallback"
-            lang="en"
-            title={`no ${ISO6391.getName(lang) || lang} template — showing English`}
-          >
-            {c.en}
-          </span>
-        );
+        return text != null && text.trim() !== '' ? <span lang={lang}>{text}</span> : null;
       }
       return <span lang="en">{c.en}</span>;
     },

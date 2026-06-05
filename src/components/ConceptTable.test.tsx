@@ -72,16 +72,15 @@ describe('ConceptTable speech-language dropdown', () => {
     expect(onChange).toHaveBeenCalledWith('bg');
   });
 
-  it('shows the selected language template with its lang attribute, else muted English fallback', () => {
+  it('shows the selected language template with its lang attribute; no template → empty cell', () => {
     render(
       <ConceptTable data={bgData} total={2} languages={['en', 'bg']} speechLang="bg" onSpeechLangChange={() => {}} />,
     );
     const bgCell = within(rowBySlug('power')).getByText('степен');
     expect(bgCell).toHaveAttribute('lang', 'bg');
-    const fallback = within(rowBySlug('ratio')).getByText('speech for ratio');
-    expect(fallback).toHaveClass('speech-fallback');
-    expect(fallback).toHaveAttribute('lang', 'en');
-    expect(fallback).toHaveAttribute('title', expect.stringContaining('English'));
+    // A row without a Bulgarian template shows NOTHING in the Speech column (no English fallback) —
+    // untranslated entries are visible at a glance.
+    expect(within(rowBySlug('ratio')).queryByText('speech for ratio')).toBeNull();
   });
 
   it('renders a plain header when the data holds a single language', () => {

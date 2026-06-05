@@ -167,9 +167,10 @@ runs without a backend. So **don't remove the seed path** — the perf e2e depen
   "cell"`, `aria-rowcount` over the full dictionary + per-row `aria-rowindex` — screen readers see the
   windowing) and a leading **status column** (`+`/`✎`/`−` icon with accessible name per `ChangeKind`,
   WCAG 1.4.1 — pairs with the row tint + accent stripe; ratios verified in `index.css`). The **Speech
-  column header is a language dropdown** when the data holds >1 language (`en` first; missing template
-  → muted English fallback with `lang`/`title`; deep-links via `?lang=` like `?filter=`); single-language
-  data (seed/e2e) keeps the plain header. The Notation column shows the **rich** render:
+  column header is a language dropdown** when the data holds >1 language (`en` first; a row without a
+  template in the selected language shows an **empty cell** — untranslated entries are visible at a
+  glance, per @dginev; deep-links via `?lang=` like `?filter=`); single-language data (seed/e2e) keeps
+  the plain header. The Notation column shows the **rich** render:
   `render/notationMarkup.ts` re-renders from `notations[0].tex` via Temml when present (the stored
   `mathml` is the *minified* form — see "Storage is minified, display is rich"), else it renders the
   stored `mathml` directly. Temml is lazy-loaded only when some visible row's primary notation has

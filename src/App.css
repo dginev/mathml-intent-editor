@@ -1175,13 +1175,6 @@
   border-color: var(--accent);
 }
 
-/* A row showing its English template because the selected language has none — muted + italic, and
-   explained by the cell's title attribute (the fallback isn't signalled by style alone). */
-.speech-fallback {
-  color: var(--text-muted);
-  font-style: italic;
-}
-
 .td {
   display: flex;
   align-items: center;
