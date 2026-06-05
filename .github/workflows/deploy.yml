@@ -1,7 +1,12 @@
 name: Deploy to GitHub Pages
 
+# Gated on CI: deploys fire only after the CI workflow (build · lint · unit + e2e) completes
+# SUCCESSFULLY on main — a red push can no longer ride into production. workflow_dispatch remains
+# as the manual escape hatch (deploys current main, ungated).
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -16,6 +21,8 @@ concurrency:
 
 jobs:
   deploy:
+    # Run for a manual dispatch, or when the triggering CI run succeeded (skipped on CI failure).
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -24,6 +31,9 @@ jobs:
       BASE_PATH: /mathml-intent-open-editor/ # project site served under /<repo>/; .env.production has the VITE_GH_*
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Deploy exactly the commit CI validated (empty on workflow_dispatch → current main).
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
