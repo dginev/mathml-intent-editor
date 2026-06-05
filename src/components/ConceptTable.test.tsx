@@ -53,15 +53,16 @@ describe('ConceptTable speech-language dropdown', () => {
     concept('ratio'), // no bg template → falls back to English
   ];
 
-  it('renders a "Speech hint" label with a language select under it, listing the data languages', () => {
+  it('renders a "Speech hint" label with a bare-code language select beside it', () => {
     render(
-      <ConceptTable data={bgData} total={2} languages={['en', 'bg']} speechLang="en" onSpeechLangChange={() => {}} />,
+      <ConceptTable data={bgData} total={2} languages={['en', 'bg']} speechLang="bg" onSpeechLangChange={() => {}} />,
     );
-    expect(screen.getByText('Speech hint')).toBeInTheDocument(); // the column label, above the control
+    expect(screen.getByText('Speech hint')).toBeInTheDocument(); // the column label, inline with the control
     const select = screen.getByRole('combobox', { name: 'Speech language' });
     const options = within(select).getAllByRole('option');
     expect(options.map((o) => (o as HTMLOptionElement).value)).toEqual(['en', 'bg']);
-    expect(options[1]).toHaveTextContent('bg — Bulgarian');
+    expect(options.map((o) => o.textContent)).toEqual(['en', 'bg']); // codes only — keeps the header slim
+    expect(select).toHaveAttribute('title', 'Bulgarian'); // the full name survives as a hover hint
   });
 
   it('reports a language switch through the callback', () => {

@@ -25,11 +25,6 @@ type TableMeta = {
   onSpeechLangChange?: (lang: string) => void;
 };
 
-/** `bg — Bulgarian`-style option label; falls back to the bare code for non-ISO-639-1 keys. */
-const langLabel = (code: string): string => {
-  const name = ISO6391.getName(code);
-  return name ? `${code} — ${name}` : code;
-};
 
 /** Status-column icon + accessible name per pending-change kind (WCAG 1.4.1: state not by color alone). */
 const STATUS: Record<ChangeKind, { icon: string; label: string }> = {
@@ -61,9 +56,9 @@ const columns = [
   columnHelper.display({
     id: 'speech',
     size: 280,
-    // Header = the "Speech hint" column label with a language dropdown on the line beneath it (the
-    // dropdown covers the languages present in the data). With a single language (the seed/e2e path)
-    // it stays plain text.
+    // Header = the "Speech hint" column label with a slim language dropdown INLINE beside it — the
+    // options show bare ISO codes (the selected language's full name rides on the select's title) so
+    // the header stays a single line. With one language (the seed/e2e path) it stays plain text.
     header: ({ table }) => {
       const meta = table.options.meta as TableMeta | undefined;
       const lang = meta?.speechLang ?? 'en';
@@ -78,13 +73,14 @@ const columns = [
           <select
             className="speech-lang"
             aria-label="Speech language"
+            title={ISO6391.getName(lang) || lang}
             value={lang}
             onClick={(e) => e.stopPropagation()}
             onChange={(e) => onChange(e.target.value)}
           >
             {options.map((l) => (
-              <option key={l} value={l}>
-                {langLabel(l)}
+              <option key={l} value={l} title={ISO6391.getName(l) || l}>
+                {l}
               </option>
             ))}
           </select>
