@@ -30,12 +30,12 @@ export function Faq({ open, onClose }: { open: boolean; onClose: () => void }) {
       aria-label="Frequently asked questions"
       onClose={onClose}
       onMouseDown={(e) => {
-        pressOutside.current = !!ref.current && e.target === ref.current && outsideBox(e, ref.current);
+        pressOutside.current = e.target === e.currentTarget && outsideBox(e, e.currentTarget);
       }}
       onClick={(e) => {
         const pressed = pressOutside.current;
         pressOutside.current = false;
-        if (pressed && ref.current && e.target === ref.current && outsideBox(e, ref.current)) onClose();
+        if (pressed && e.target === e.currentTarget && outsideBox(e, e.currentTarget)) onClose();
       }}
     >
       <div className="faq">

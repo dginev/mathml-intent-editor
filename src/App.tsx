@@ -61,14 +61,15 @@ export default function App() {
     const r = d.getBoundingClientRect();
     return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
   };
-  const trackPress = (ref: React.RefObject<HTMLDialogElement | null>) => (e: React.MouseEvent) => {
-    pressOutside.current = !!ref.current && e.target === ref.current && outsideBox(e, ref.current);
+  /** onMouseDown on a <dialog>: record whether the press landed on the true backdrop. */
+  const trackPress = (e: React.MouseEvent<HTMLDialogElement>) => {
+    pressOutside.current = e.target === e.currentTarget && outsideBox(e, e.currentTarget);
   };
   /** True only for a full press-and-release on the real backdrop (then resets the press state). */
-  const isBackdropClick = (ref: React.RefObject<HTMLDialogElement | null>, e: React.MouseEvent) => {
+  const isBackdropClick = (e: React.MouseEvent<HTMLDialogElement>) => {
     const pressed = pressOutside.current;
     pressOutside.current = false;
-    return pressed && !!ref.current && e.target === ref.current && outsideBox(e, ref.current);
+    return pressed && e.target === e.currentTarget && outsideBox(e, e.currentTarget);
   };
   useGlobalFindShortcut(filterRef); // Ctrl/⌘+F focuses the (whole-dictionary) Filter
 
@@ -478,9 +479,9 @@ export default function App() {
         onCancel={(e) => {
           if (!confirmDiscard()) e.preventDefault(); // Esc with unsaved edits → keep the modal open
         }}
-        onMouseDown={trackPress(dialogRef)}
+        onMouseDown={trackPress}
         onClick={(e) => {
-          if (isBackdropClick(dialogRef, e) && confirmDiscard()) closeModal();
+          if (isBackdropClick(e) && confirmDiscard()) closeModal();
         }}
       >
         {editing && (
@@ -504,9 +505,9 @@ export default function App() {
         className="modal save-modal"
         aria-label="Describe your changes"
         onClose={closeSavePrompt}
-        onMouseDown={trackPress(saveDialogRef)}
+        onMouseDown={trackPress}
         onClick={(e) => {
-          if (isBackdropClick(saveDialogRef, e)) closeSavePrompt();
+          if (isBackdropClick(e)) closeSavePrompt();
         }}
       >
         <div className="save-prompt">
