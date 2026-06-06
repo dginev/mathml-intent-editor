@@ -54,6 +54,7 @@ export function RowControls({
 export function InfoPopover({ label, children }: { label: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLSpanElement>(null);
+  const btn = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!open) return;
     const onDown = (e: PointerEvent) => {
@@ -64,8 +65,20 @@ export function InfoPopover({ label, children }: { label: string; children: Reac
     return () => document.removeEventListener('pointerdown', onDown, true);
   }, [open]);
   return (
-    <span className="info-wrap" ref={wrap}>
+    <span
+      className="info-wrap"
+      ref={wrap}
+      onKeyDown={(e) => {
+        if (e.key !== 'Escape' || !open) return;
+        // Innermost layer first: swallow the Escape so an enclosing <dialog> doesn't also cancel.
+        e.preventDefault();
+        e.stopPropagation();
+        setOpen(false);
+        btn.current?.focus(); // keyboard dismissal returns focus to the toggle
+      }}
+    >
       <button
+        ref={btn}
         type="button"
         className="info-btn"
         aria-label={label}

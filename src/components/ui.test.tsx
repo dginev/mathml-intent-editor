@@ -1,6 +1,28 @@
 import { fireEvent, render, screen, act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Toast } from './ui';
+import { InfoPopover, Toast } from './ui';
+
+describe('InfoPopover', () => {
+  it('is an accessible toggle: aria-expanded tracks it, Escape closes and refocuses the button', () => {
+    render(
+      <InfoPopover label="About GitHub sign-in">
+        <p>identity only</p>
+      </InfoPopover>,
+    );
+    const toggle = screen.getByRole('button', { name: 'About GitHub sign-in' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('identity only')).toBeInTheDocument();
+
+    // Escape dismisses the popover (innermost layer first) and returns focus to its toggle.
+    fireEvent.keyDown(toggle, { key: 'Escape' });
+    expect(screen.queryByText('identity only')).toBeNull();
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(document.activeElement).toBe(toggle);
+  });
+});
 
 describe('Toast', () => {
   beforeEach(() => vi.useFakeTimers());

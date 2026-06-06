@@ -197,9 +197,41 @@ describe('App (integration: save/branch flow)', () => {
     expect(pop).toHaveTextContent(/@handle/);
     expect(pop).toHaveTextContent(/no repository access/i);
 
-    // The fuller FAQ dialog opens from the header link.
-    fireEvent.click(screen.getByRole('button', { name: 'FAQ' }));
+    // The popover's "FAQ" is a real link into the dialog (deep-link fragment, keyboard-followable).
+    const faqLink = screen.getByRole('link', { name: 'FAQ' });
+    expect(faqLink).toHaveAttribute('href', '#faq');
+
+    // The fuller About/FAQ dialog opens from the header link.
+    fireEvent.click(screen.getByRole('button', { name: 'About / FAQ' }));
     expect(screen.getByTestId('faq')).toHaveTextContent(/why sign in/i);
     fireEvent.click(screen.getByRole('button', { name: 'Close FAQ' }));
+  });
+
+  it('deep-links the FAQ: loading with #faq opens it, and the dialog reflects into the fragment', async () => {
+    window.history.replaceState(null, '', '/#faq');
+    render(<App />);
+    await screen.findByTestId('concept-count');
+    const faq = () => screen.getByTestId('faq') as HTMLDialogElement;
+    expect(faq().open).toBe(true); // arrived via the shared link → documentation is already open
+
+    // Closing strips the fragment (the URL stays shareable-clean)…
+    fireEvent.click(screen.getByRole('button', { name: 'Close FAQ' }));
+    expect(faq().open).toBe(false);
+    expect(window.location.hash).toBe('');
+
+    // …and reopening from the header restores it (copyable answer URL).
+    fireEvent.click(screen.getByRole('button', { name: 'About / FAQ' }));
+    expect(faq().open).toBe(true);
+    expect(window.location.hash).toBe('#faq');
+  });
+
+  it('follows in-page #faq navigation (hashchange) while the app is running', async () => {
+    render(<App />);
+    await screen.findByTestId('concept-count');
+    expect((screen.getByTestId('faq') as HTMLDialogElement).open).toBe(false);
+
+    window.location.hash = '#faq'; // e.g. the sign-in popover's FAQ link
+    fireEvent(window, new HashChangeEvent('hashchange'));
+    await waitFor(() => expect((screen.getByTestId('faq') as HTMLDialogElement).open).toBe(true));
   });
 });

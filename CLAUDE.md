@@ -218,11 +218,18 @@ runs without a backend. So **don't remove the seed path** — the perf e2e depen
   reopens in TeX mode. Reports `onDirtyChange` (content-state vs first-render snapshot; edit-then-revert
   reads clean) — `App` uses it to guard backdrop/Esc dismissal behind "Discard?". Lazy-loaded from
   `App.tsx`.
-- `src/components/Faq.tsx` — the sign-in/permissions FAQ `<dialog>` (header "FAQ" link). Paired with an
-  `InfoPopover` beside the Sign-in button (identity-only consent in one breath). Both exist to dispel
-  the "an app wants my GitHub" fear (round-2 feedback).
+- `src/components/Faq.tsx` — the About/FAQ `<dialog>` (header "About / FAQ" link; deep-linked via the
+  `#faq` fragment — App syncs it both ways, so the open dialog is a shareable docs URL). Leads with
+  "What is this editor? / How does it work?" (round-3 "any documentation?" ask) — incl. a pending-change
+  legend whose swatches reuse the `--diff-*` row variables (live under theme/palette changes; each
+  carries an accessible color name) — then the sign-in/permissions Q&A. On open, focus moves to the
+  title (`tabIndex=-1`) so reading starts at the top, not at the bottom Close button (`.modal` scrolls).
+  Paired with an `InfoPopover` beside the Sign-in button (identity-only consent in one breath;
+  Esc closes it innermost-first and refocuses the toggle; its "FAQ" mention is an `#faq` link). Both
+  exist to dispel the "an app wants my GitHub" fear (round-2 feedback).
 - `src/App.tsx` — shell: loads the dictionary, filter input (`?filter=`), speech-language state
-  (`?lang=`), table; the row ✎ opens the editor; Save submits the batch as a PR. The generated PR title
+  (`?lang=`), the About/FAQ dialog (`#faq` fragment, two-way sync), table; the row ✎ opens the
+  editor; Save submits the batch as a PR. The generated PR title
   is hard-capped at 72 chars (`prTitle` — summary truncates at a name boundary, `by @handle` always
   survives). Error toasts persist until dismissed (info toasts auto-close after 12s).
 

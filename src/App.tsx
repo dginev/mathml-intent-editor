@@ -32,6 +32,9 @@ const filterFromUrl = () => new URLSearchParams(window.location.search).get('fil
 /** Read the deep-link speech language from the current URL (`?lang=…`, default English). */
 const langFromUrl = () => new URLSearchParams(window.location.search).get('lang') ?? 'en';
 
+/** Whether the URL fragment deep-links the About/FAQ dialog (`#faq` — a shareable docs link). */
+const faqFromUrl = () => window.location.hash === '#faq';
+
 export default function App() {
   const [filter, setFilter] = useState(filterFromUrl); // hydrate from ?filter= so the view is shareable
   const [speechLang, setSpeechLang] = useState(langFromUrl); // hydrate from ?lang= (Speech column)
@@ -45,7 +48,7 @@ export default function App() {
   // The PR the user's branch terminates in; when it closes/merges we reset the session and reload.
   const [activePr, setActivePr] = useState<ActivePr | null>(() => loadPr(localStorage));
   const [reloadKey, setReloadKey] = useState(0); // bump to force a fresh dictionary load
-  const [faqOpen, setFaqOpen] = useState(false);
+  const [faqOpen, setFaqOpen] = useState(faqFromUrl); // hydrate from #faq so the docs are linkable
   const dialogRef = useRef<HTMLDialogElement>(null);
   const saveDialogRef = useRef<HTMLDialogElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
@@ -93,6 +96,22 @@ export default function App() {
     const qs = params.toString();
     window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash);
   }, [speechLang]);
+
+  // The About/FAQ dialog ↔ the `#faq` fragment, both ways: follow in-page links/pastes (hashchange),
+  // and reflect open/close into the URL so the open dialog is a copyable documentation link.
+  useEffect(() => {
+    const onHash = () => setFaqOpen(faqFromUrl());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+  useEffect(() => {
+    if (faqOpen === faqFromUrl()) return; // in sync (incl. the hydrated load; other hashes read false)
+    window.history.replaceState(
+      null,
+      '',
+      window.location.pathname + window.location.search + (faqOpen ? '#faq' : ''),
+    );
+  }, [faqOpen]);
 
   // Drive the native modal dialog from `editing` (showModal centres + traps focus; close() on cancel).
   useEffect(() => {
@@ -392,13 +411,13 @@ export default function App() {
                     Signing in shares <strong>identity only</strong> — your public <code>@handle</code>.{' '}
                     <strong>No repository access, no email, no write scope.</strong> Edits are committed
                     by the project bot, authored as you. Revoke anytime under GitHub → Settings →
-                    Applications. See the <em>FAQ</em> for details.
+                    Applications. See the <a href="#faq">FAQ</a> for details.
                   </p>
                 </InfoPopover>
               </>
             ))}
           <button type="button" className="faq-btn" onClick={() => setFaqOpen(true)}>
-            FAQ
+            About / FAQ
           </button>
           <button
             type="button"

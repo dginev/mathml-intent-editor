@@ -204,6 +204,38 @@
   margin: 0.25rem 0;
   font-size: 0.9rem;
 }
+/* The pending-change legend: each swatch repeats the real row styling (tint + accent stripe) via
+   the same --diff-* variables, so it stays true to the table under either theme or a palette edit. */
+.faq-legend {
+  list-style: none;
+  margin: 0.25rem 0;
+  padding: 0;
+  font-size: 0.9rem;
+}
+.faq-legend li {
+  margin: 0.2rem 0;
+}
+.faq-legend .swatch {
+  display: inline-block;
+  width: 1.8em;
+  height: 1em;
+  border-radius: 3px;
+  vertical-align: -0.15em;
+  border: 1px solid var(--border);
+}
+.swatch-added {
+  background: var(--diff-add-bg);
+  box-shadow: inset 3px 0 0 var(--diff-add-accent);
+}
+.swatch-edited {
+  background: var(--diff-changed-bg);
+  box-shadow: inset 3px 0 0 var(--diff-changed-accent);
+}
+.swatch-deleted {
+  background: var(--diff-del-bg);
+  box-shadow: inset 3px 0 0 var(--diff-del-accent);
+}
+
 .faq .actions {
   display: flex;
   justify-content: flex-end;
