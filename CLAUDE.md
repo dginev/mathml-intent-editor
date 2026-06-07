@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project
 
 **MathML Intent Open Editor** — a web app for open community curation (add / edit / remove) of
-the *Intent Open* concept dictionary defined by [MathML 4 Intent](https://w3c.github.io/mathml-docs/intent/).
+the *Intent Open* concept dictionary defined by [MathML 4 Intent](https://w3c.github.io/mathml/#mixing_intent).
 The spec lives at `~/git/mathml/src/intent.html` (sibling checkout). The canonical concept list to
 seed/reference is in `~/git/mathml-intent-open/` (sibling checkout).
 
@@ -213,7 +213,12 @@ runs without a backend. So **don't remove the seed path** — the perf e2e depen
   preview line — **Rendered** (the rich Temml MathML) ∥ **MathML source (simplified)** (the
   `minifyMathml` form that gets stored). Neither preview inner-scrolls — both grow vertically and the
   modal's own scroll navigates; Done/Cancel sit in a **sticky bottom action bar** (Delete on the far
-  side). One derivation pipeline (`deriveNotation`) per notation: TeX → `texToIntent` → minify; raw →
+  side). Both are **always rendered**; Done gates on validity+dirty via **`aria-disabled` (never the
+  native `disabled` attribute)** so it stays in the tab order and is announced as unavailable — a
+  natively-disabled button drops out of the AT tab order, so a screen-reader user never finds it
+  (round-3 feedback); the `onClick` guards activation. The sticky bar pins with `bottom:-1rem` to
+  cancel the modal's `padding-bottom` (else it floats a 1rem gap above the modal floor). One
+  derivation pipeline (`deriveNotation`) per notation: TeX → `texToIntent` → minify; raw →
   XML-validate, stored verbatim with no `tex` key. A TeX-authored extra persists `{tex, mathml}` and
   reopens in TeX mode. Reports `onDirtyChange` (content-state vs first-render snapshot; edit-then-revert
   reads clean) — `App` uses it to guard backdrop/Esc dismissal behind "Discard?". Lazy-loaded from

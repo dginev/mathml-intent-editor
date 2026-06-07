@@ -49,7 +49,7 @@ describe('NotationEditor', () => {
     const onSave = vi.fn();
     render(<NotationEditor concept={base} onSave={onSave} />);
     typeTex('-\\arg{x}{n}');
-    await waitFor(() => expect(screen.getByTestId('save')).toBeEnabled());
+    await waitFor(() => expect(screen.getByTestId('save')).toHaveAttribute('aria-disabled', 'false'));
     fireEvent.click(screen.getByTestId('save'));
 
     expect(onSave).toHaveBeenCalledTimes(1);
@@ -108,13 +108,42 @@ describe('NotationEditor', () => {
     render(<NotationEditor concept={base} onSave={vi.fn()} />);
     typeTex('\\frac{1}');
     expect(await screen.findByTestId('error')).toBeInTheDocument();
-    expect(screen.getByTestId('save')).toBeDisabled();
+    expect(screen.getByTestId('save')).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('disables saving when the concept name is cleared', () => {
     render(<NotationEditor concept={base} onSave={vi.fn()} />);
     fireEvent.change(screen.getByTestId('slug-input'), { target: { value: '' } });
-    expect(screen.getByTestId('save')).toBeDisabled();
+    expect(screen.getByTestId('save')).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('keeps a pristine Done perceivable to AT: focusable, announced as unavailable, click inert', () => {
+    const onSave = vi.fn();
+    const onCancel = vi.fn();
+    render(<NotationEditor concept={base} onSave={onSave} onCancel={onCancel} />);
+    const done = screen.getByTestId('save');
+    // aria-disabled, never native disabled: a disabled button drops out of the tab order, so a
+    // screen-reader user tabbing the dialog never finds it ("Done doesn't exist" — round-3 feedback).
+    expect(done).not.toBeDisabled();
+    expect(done).toHaveAttribute('aria-disabled', 'true'); // nothing changed yet
+    done.focus();
+    expect(document.activeElement).toBe(done); // reachable by Tab…
+    fireEvent.click(done);
+    expect(onSave).not.toHaveBeenCalled(); // …but inert until there is something to stage
+    // Cancel is always a live exit.
+    const cancel = screen.getByRole('button', { name: 'Cancel' });
+    expect(cancel).toBeEnabled();
+    fireEvent.click(cancel);
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('gates Done on having changes: active after an edit, unavailable again on revert', () => {
+    render(<NotationEditor concept={base} onSave={vi.fn()} />);
+    const done = screen.getByTestId('save');
+    fireEvent.change(screen.getByTestId('slug-input'), { target: { value: 'renamed' } });
+    expect(done).toHaveAttribute('aria-disabled', 'false');
+    fireEvent.change(screen.getByTestId('slug-input'), { target: { value: base.slug } });
+    expect(done).toHaveAttribute('aria-disabled', 'true'); // reverted → nothing to stage
   });
 
   it('requests deletion when the Delete button is clicked', () => {
@@ -168,7 +197,7 @@ describe('NotationEditor', () => {
     fireEvent.change(within(block).getByTestId('extra-notation-tex'), {
       target: { value: '-\\arg{x}{n}' },
     });
-    await waitFor(() => expect(screen.getByTestId('save')).toBeEnabled());
+    await waitFor(() => expect(screen.getByTestId('save')).toHaveAttribute('aria-disabled', 'false'));
     fireEvent.click(screen.getByTestId('save'));
     const saved = onSave.mock.calls[0][0] as Concept;
     expect(saved.notations[1].tex).toBe('-\\arg{x}{n}');
@@ -200,12 +229,12 @@ describe('NotationEditor', () => {
     });
     expect(within(blocks[1]).getByTestId('extra-notation-error')).toBeInTheDocument();
     expect(within(blocks[0]).queryByTestId('extra-notation-error')).toBeNull(); // not the first
-    expect(screen.getByTestId('save')).toBeDisabled();
+    expect(screen.getByTestId('save')).toHaveAttribute('aria-disabled', 'true');
     // Fixing it re-enables Done and the fixed value is saved verbatim.
     fireEvent.change(within(blocks[1]).getByTestId('extra-notation-mathml'), {
       target: { value: '<math><mo>+</mo></math>' },
     });
-    await waitFor(() => expect(screen.getByTestId('save')).toBeEnabled());
+    await waitFor(() => expect(screen.getByTestId('save')).toHaveAttribute('aria-disabled', 'false'));
     fireEvent.click(screen.getByTestId('save'));
     const saved = onSave.mock.calls[0][0] as Concept;
     expect(saved.notations).toEqual([

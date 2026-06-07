@@ -1135,7 +1135,15 @@
    far side of the bar. Negative margins span the modal's padding so content scrolls under cleanly. */
 .notation-editor .actions {
   position: sticky;
-  bottom: 0;
+  /* The scroll container (.modal) has padding-bottom:1rem, and a sticky `bottom:0` pins to the
+     scrollport's content edge — 1rem above the modal's true bottom, leaving a gap that content peeks
+     through. Pin 1rem lower to sit flush; the matching -1rem bottom margin bleeds the bar's
+     background down over that padding so nothing shows beneath it. */
+  bottom: -1rem;
+  /* Own stacking context so the opaque bar paints above the fields scrolling under it; a bare sticky
+     is z-index:auto, which positioned content (link/alias rows) can show through. Stays below the
+     info popovers (.legend-pop, z-index 50) so an open ⓘ still draws over the footer. */
+  z-index: 1;
   display: flex;
   gap: 0.5rem;
   margin: 1rem -1.25rem -1rem; /* negative: span/cancel the modal's 1rem/1.25rem padding */
@@ -1154,13 +1162,15 @@
   font: inherit;
 }
 
-.notation-editor button[data-testid='save']:not(:disabled) {
+.notation-editor button[data-testid='save']:not([aria-disabled='true']) {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-text);
 }
 
-.notation-editor button:disabled {
+/* Done uses aria-disabled (stays focusable for AT users), so style both disabled forms alike. */
+.notation-editor button:disabled,
+.notation-editor button[aria-disabled='true'] {
   opacity: 0.5;
   cursor: not-allowed;
 }

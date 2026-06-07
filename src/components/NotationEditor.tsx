@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import ISO6391 from 'iso-639-1';
 import { missingSpeechRefs, texToIntent, unusedArgRefs } from '../render/intent';
 import { minifyMathml } from '../render/minifyMathml';
@@ -137,7 +137,7 @@ function NamingGuide() {
           W3C concept lists
         </a>{' '}
         and the{' '}
-        <a href="https://w3c.github.io/mathml-docs/intent/" target="_blank" rel="noreferrer">
+        <a href="https://w3c.github.io/mathml/#mixing_intent" target="_blank" rel="noreferrer">
           Intent spec
         </a>
         .
@@ -484,11 +484,18 @@ export function NotationEditor({
     speechRows.map((r) => [r.lang, r.text]),
     extraRows.map((r) => [r.mode, r.tex, r.mathml]),
   ]);
-  const initialContent = useRef<string | null>(null);
-  if (initialContent.current === null) initialContent.current = contentState;
+  // Snapshot the first render's content (lazy state init, never updated) so `dirty` is readable during
+  // render — a ref read in render scope trips react-hooks/refs, and we need `dirty` for Done's state.
+  const [initialContent] = useState(() => contentState);
+  const dirty = contentState !== initialContent;
   useEffect(() => {
-    onDirtyChange?.(contentState !== initialContent.current);
-  }, [contentState, onDirtyChange]);
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+  // Done is unavailable while invalid (canSave) or while there is nothing to stage (dirty) — but via
+  // aria-disabled, never the native attribute: a disabled button drops out of the tab order, so a
+  // screen-reader user tabbing the dialog never finds it (round-3 feedback). aria-disabled keeps it
+  // focusable and announced as unavailable; the onClick guard makes it inert.
+  const saveDisabled = !canSave || !dirty;
 
   return (
     <div className="notation-editor" data-testid="notation-editor">
@@ -794,7 +801,12 @@ export function NotationEditor({
       {/* Sticky: Done/Cancel stay reachable while the (tall) editor body scrolls. The destructive
           Delete sits on the opposite side so it can't be hit by a slip aimed at Done/Cancel. */}
       <div className="actions">
-        <button type="button" data-testid="save" disabled={!canSave} onClick={() => canSave && onSave(buildUpdated())}>
+        <button
+          type="button"
+          data-testid="save"
+          aria-disabled={saveDisabled}
+          onClick={() => !saveDisabled && onSave(buildUpdated())}
+        >
           Done
         </button>
         {onCancel && (

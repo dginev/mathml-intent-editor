@@ -55,7 +55,7 @@ export function Faq({ open, onClose }: { open: boolean; onClose: () => void }) {
         <h3>What is this editor?</h3>
         <p>
           A community editor for the Open concept list of{' '}
-          <a href="https://w3c.github.io/mathml-docs/intent/" target="_blank" rel="noreferrer">
+          <a href="https://w3c.github.io/mathml/#mixing_intent" target="_blank" rel="noreferrer">
             MathML Intent
           </a>
           , the W3C effort to give mathematical formulas high-quality{' '}
