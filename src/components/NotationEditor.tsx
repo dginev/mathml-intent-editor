@@ -148,6 +148,7 @@ function NamingGuide() {
 
 function MacroLegend() {
   return (
+    <>
     <table className="legend" data-testid="legend">
       <thead>
         <tr>
@@ -187,6 +188,16 @@ function MacroLegend() {
         </tr>
       </tbody>
     </table>
+    <p className="legend-note" data-testid="intent-default-help">
+      <code>{'\\intent'}</code> is optional: if you omit it, the root intent is filled in automatically
+      as <code>{'concept($arg1, $arg2, …)'}</code> — the concept name applied to your{' '}
+      <code>{'\\arg'}</code> names, in the order they appear. So{' '}
+      <code>{'\\arg{base}{x}^{\\arg{power}{n}}'}</code> on the concept <code>power</code> already means{' '}
+      <code>{'power($base,$power)'}</code>. Write <code>{'\\intent'}</code> only to <em>override</em> that
+      default: a different name, reordered/renamed arguments, a nested expression, or an argument-free
+      symbol (e.g. <code>{'\\intent{the-reals}{\\mathbb{R}}'}</code>).
+    </p>
+    </>
   );
 }
 
