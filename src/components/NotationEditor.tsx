@@ -126,8 +126,9 @@ function NamingGuide() {
           different arities (<code>disjoint-union</code> at 1 and 2). Set arity to the argument count.
         </li>
         <li>
-          Speak each argument positionally with <code>$</code> (<code>$x</code>, <code>$1</code>); arg
-          names must start with a letter.
+          Reference each argument in speech with <code>$</code> and a{' '}
+          <strong>letter-initial name</strong> (<code>$base</code>, <code>$power</code>,{' '}
+          <code>$x</code>) — name it by its role or kind, not positionally (<code>$1</code>).
         </li>
         <li>Scan “Related concepts” below first, so you don’t add a duplicate.</li>
       </ul>
