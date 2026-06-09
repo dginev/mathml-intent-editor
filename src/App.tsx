@@ -551,8 +551,15 @@ export default function App() {
             <a href={reviewPr.url} target="_blank" rel="noreferrer">
               PR #{reviewPr.number}
             </a>{' '}
+            {reviewPr.state === 'closed' && (
+              <span className={`review-state ${reviewPr.merged ? 'merged' : 'closed'}`}>
+                {' '}
+                {reviewPr.merged ? 'merged' : 'closed'}
+              </span>
+            )}{' '}
             — {reviewPr.title}
             {reviewPr.author && ` by @${reviewPr.author}`}
+            {reviewPr.state === 'closed' && <span className="review-vs"> · vs its branch point</span>}
             {reviewSummary && (
               <span className="review-tally">
                 {' · '}

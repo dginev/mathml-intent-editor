@@ -1460,6 +1460,16 @@ a.link-display.diff-add {
   font: inherit;
   cursor: pointer;
 }
+.pr-group {
+  margin-bottom: 0.8rem;
+}
+.pr-group-head {
+  margin: 0 0 0.4rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
 .pr-list {
   list-style: none;
   margin: 0;
@@ -1467,8 +1477,32 @@ a.link-display.diff-add {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  max-height: 60vh;
+  max-height: 32vh;
   overflow: auto;
+}
+/* Closed/merged state chip on a PR row and in the review banner. */
+.pr-tag,
+.review-state {
+  flex: 0 0 auto;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+}
+.pr-tag.merged,
+.review-state.merged {
+  background: var(--diff-changed-bg);
+  color: var(--diff-changed-accent);
+}
+.pr-tag.closed,
+.review-state.closed {
+  background: var(--diff-del-bg);
+  color: var(--diff-del-accent);
+}
+.review-vs {
+  color: var(--text-muted);
 }
 .pr-item {
   display: flex;

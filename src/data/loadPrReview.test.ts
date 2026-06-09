@@ -22,8 +22,16 @@ const HEAD = yaml([
 ]);
 
 const textRes = (body: string) => ({ status: 200, ok: true, text: async () => body }) as Response;
+const jsonRes = (body: unknown) => ({ status: 200, ok: true, json: async () => body }) as Response;
 
-const pr = { headOwner: 'dginev', headRepo: 'mathml-intent-open', headRef: 'pr-branch' };
+const pr = {
+  headOwner: 'dginev',
+  headRepo: 'mathml-intent-open',
+  headRef: 'pr-branch',
+  state: 'open' as const,
+  headSha: 'headsha',
+  baseSha: 'basesha',
+};
 
 /** Serve MAIN for the base ref, HEAD for the PR branch (URL-branched, like the real raw reads). */
 const fetchImpl = vi.fn(async (url: string) =>
@@ -56,5 +64,27 @@ describe('loadPrReview', () => {
       url.includes('/pr-branch/') ? ({ status: 404, ok: false } as Response) : textRes(MAIN),
     ) as unknown as typeof fetch;
     await expect(loadPrReview({ ...args, fetchImpl: notFound })).rejects.toThrow(/pr-branch/);
+  });
+
+  it('a CLOSED PR diffs head against its merge base (branch point), not present-day main', async () => {
+    // MAIN here stands in for the merge-base snapshot; PRESENT advanced beyond it and must NOT be used.
+    const PRESENT = yaml([['alpha', 'alpha PRESENT-DAY DRIFT']]);
+    const closedFetch = vi.fn(async (url: string) => {
+      if (url.includes('/compare/')) return jsonRes({ merge_base_commit: { sha: 'mbsha' } });
+      if (url.includes('/headsha/')) return textRes(HEAD); // the PR head commit, read by SHA
+      if (url.includes('/mbsha/')) return textRes(MAIN); // the branch point — the correct baseline
+      return textRes(PRESENT); // present-day main / branch — should never be consulted
+    }) as unknown as typeof fetch;
+
+    const closedPr = { ...pr, state: 'closed' as const };
+    const { concepts, base, deletedIds } = await loadPrReview({ ...args, pr: closedPr, fetchImpl: closedFetch });
+
+    // The merge base (compare base...head) was resolved…
+    expect((closedFetch as ReturnType<typeof vi.fn>).mock.calls.some(([u]) => String(u).includes('/compare/basesha...headsha'))).toBe(true);
+    // …and the diff is head-vs-branch-point (same shape as the open case), NOT vs the drifted present.
+    expect(base.map((c) => c.slug)).toEqual(['alpha', 'beta', 'gamma']);
+    expect(base.find((c) => c.slug === 'alpha')!.en).toBe('alpha'); // not the PRESENT-DAY DRIFT
+    expect([...deletedIds]).toEqual([conceptId({ slug: 'gamma', arity: 0 })]);
+    expect(concepts.map((c) => c.slug)).toEqual(['alpha', 'beta', 'delta', 'gamma']);
   });
 });
