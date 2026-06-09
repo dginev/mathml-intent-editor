@@ -10,6 +10,7 @@ import { useDictionary, type Review } from './hooks/useDictionary';
 import { useIdentity } from './hooks/useIdentity';
 import { useTheme } from './hooks/useTheme';
 import { useGlobalFindShortcut } from './hooks/useGlobalFindShortcut';
+import { useBackClose } from './hooks/useBackClose';
 import { ConceptTable } from './components/ConceptTable';
 import { Faq } from './components/Faq';
 import { PrReviewPicker } from './components/PrReviewPicker';
@@ -279,6 +280,26 @@ export default function App() {
     () => !editorDirty.current || window.confirm('Discard your unsaved changes to this concept?'),
     [],
   );
+
+  // Browser Back closes whichever dialog is open (it never leaves the page mid-dialog). The editor reuses
+  // its unsaved-changes guard, so Back can be declined (the entry re-arms); the others close outright.
+  useBackClose(!!editing, () => {
+    if (!confirmDiscard()) return false; // kept editing — Back stays armed
+    closeModal();
+    return true;
+  });
+  useBackClose(!!viewing, () => {
+    setViewing(null);
+    return true;
+  });
+  useBackClose(pickerOpen, () => {
+    setPickerOpen(false);
+    return true;
+  });
+  useBackClose(savePrompt, () => {
+    setSavePrompt(false);
+    return true;
+  });
 
   // "Done" — apply the edit/addition to the working set (batched); the global Save submits later.
   const handleSave = useCallback(
