@@ -681,23 +681,33 @@ a.link-display.diff-add {
 .value-diff {
   overflow-wrap: anywhere;
 }
-/* A notation's MathML source diff: the old (red) above the new (green), each lightly accented. */
-.mathml-diff {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
+/* A notation's MathML source as a unified line-by-line diff: removed lines red, added green, context
+   plain — each line keeps its syntax highlighting, with a +/− gutter. */
+.mathml-source-diff {
+  padding: 0.5rem 0.3rem;
 }
-.mathml-side {
-  border-left: 3px solid transparent;
-  border-radius: 4px;
+.mathml-source-diff .diff-line {
+  display: block;
+  padding-left: 0.2rem;
 }
-.mathml-side.mathml-old {
-  border-left-color: var(--diff-del-accent);
+.mathml-source-diff .diff-gutter {
+  display: inline-block;
+  width: 1ch;
+  margin-right: 0.4rem;
+  color: var(--text-muted);
+  user-select: none;
+}
+.mathml-source-diff .diff-line-del {
   background: var(--diff-del-bg);
 }
-.mathml-side.mathml-new {
-  border-left-color: var(--diff-add-accent);
+.mathml-source-diff .diff-line-add {
   background: var(--diff-add-bg);
+}
+.mathml-source-diff .diff-line-del .diff-gutter {
+  color: var(--diff-del-accent);
+}
+.mathml-source-diff .diff-line-add .diff-gutter {
+  color: var(--diff-add-accent);
 }
 .alias-chip.removed {
   border-style: dashed;

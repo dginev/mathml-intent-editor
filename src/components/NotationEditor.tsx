@@ -4,7 +4,7 @@ import { missingSpeechRefs, texToIntent, unusedArgRefs } from '../render/intent'
 import { minifyMathml } from '../render/minifyMathml';
 import { loadTemml, type TemmlEngine } from '../render/temmlEngine';
 import { MathML } from './MathML';
-import { MathMLSource } from './MathMLSource';
+import { MathMLSource, MathMLSourceDiff } from './MathMLSource';
 import { IconButton, InfoPopover, RowControls } from './ui';
 import { aliasWarnings, relatedConcepts, type ConceptIndex } from '../data/conceptIndex';
 import { uniq } from '../uniq';
@@ -361,18 +361,7 @@ function NotationAuthor({
           <div className="preview-cell">
             <span className="preview-label">MathML source</span>
             {diffSource && mathChanged ? (
-              <div className="mathml-diff">
-                {(beforeMathml ?? '').trim() !== '' && (
-                  <div className="mathml-side mathml-old">
-                    <MathMLSource markup={beforeMathml!} />
-                  </div>
-                )}
-                {(source ?? '').trim() !== '' && (
-                  <div className="mathml-side mathml-new">
-                    <MathMLSource markup={source!} />
-                  </div>
-                )}
-              </div>
+              <MathMLSourceDiff before={beforeMathml ?? ''} after={source ?? ''} />
             ) : source ? (
               <MathMLSource markup={source} />
             ) : (
