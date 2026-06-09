@@ -44,6 +44,28 @@ describe('listOpenPullRequests', () => {
     );
   });
 
+  it('surfaces the contributor (not the bot) for a bot-opened PR — from the body footer or title', async () => {
+    const single = async (over: Record<string, unknown>) =>
+      (await listOpenPullRequests('o', 'r', vi.fn(async () => res([apiPull(over)])) as unknown as typeof fetch))[0];
+
+    // body footer "Proposed by @handle" wins
+    expect(
+      (
+        await single({
+          user: { login: 'mathml-intent-open-editor[bot]', type: 'Bot' },
+          title: 'edit: adjugate; by @dginev',
+          body: '### changes\n\n_Proposed by @dginev via the MathML Intent Open Editor._',
+        })
+      ).author,
+    ).toBe('dginev');
+    // falls back to the title's "by @handle" when there's no body footer
+    expect((await single({ user: { login: 'x[bot]', type: 'Bot' }, title: 'add: test; by @physikerwelt', body: '' })).author).toBe(
+      'physikerwelt',
+    );
+    // a human-opened PR is just its opener
+    expect((await single({ user: { login: 'dginev', type: 'User' } })).author).toBe('dginev');
+  });
+
   it('is fork-aware — reads head owner/repo/sha from head.repo, not the base repo', async () => {
     const fork = apiPull({
       number: 21,

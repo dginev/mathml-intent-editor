@@ -35,14 +35,29 @@ export type PullRequest = {
 type ApiPull = {
   number?: number;
   title?: string;
+  body?: string | null;
   html_url?: string;
   updated_at?: string;
   state?: string;
   merged_at?: string | null;
-  user?: { login?: string } | null;
+  user?: { login?: string; type?: string } | null;
   head?: { ref?: string; sha?: string; repo?: { name?: string; owner?: { login?: string } | null } | null } | null;
   base?: { sha?: string } | null;
 };
+
+/**
+ * The contributing author. The project bot opens PRs but commits are authored as the contributor, who is
+ * named in the auto-generated body footer ("Proposed by @handle") and title ("…; by @handle") — so for a
+ * bot-opened PR we surface that handle, not the bot. A human-opened PR is simply its opener.
+ */
+function authorOf(p: ApiPull): string {
+  const opener = p.user?.login ?? '';
+  const isBot = p.user?.type === 'Bot' || opener.endsWith('[bot]');
+  if (!isBot) return opener;
+  const m =
+    (p.body ?? '').match(/Proposed by @([A-Za-z\d-]+)/i) ?? (p.title ?? '').match(/\bby @([A-Za-z\d-]+)/i);
+  return m ? m[1] : opener;
+}
 
 /** Normalize one API PR; `null` if its head is unfetchable (deleted fork) or the payload is malformed. */
 function mapPull(p: ApiPull): PullRequest | null {
@@ -60,7 +75,7 @@ function mapPull(p: ApiPull): PullRequest | null {
     number: p.number,
     title: p.title ?? '',
     url: p.html_url ?? '',
-    author: p.user?.login ?? '',
+    author: authorOf(p),
     updatedAt: p.updated_at ?? '',
     state: p.state === 'closed' ? 'closed' : 'open',
     merged: p.merged_at != null,
