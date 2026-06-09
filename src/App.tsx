@@ -5,16 +5,18 @@ import { buildConceptIndex } from './data/conceptIndex';
 import { conceptMatches, matchRank } from './data/conceptMatch';
 import { classifyChange, type ChangeKind } from './data/pendingChanges';
 import { buildSubmission } from './github/submission';
-import { useDictionary } from './hooks/useDictionary';
+import { useDictionary, type Review } from './hooks/useDictionary';
 import { useIdentity } from './hooks/useIdentity';
 import { useTheme } from './hooks/useTheme';
 import { useGlobalFindShortcut } from './hooks/useGlobalFindShortcut';
 import { ConceptTable } from './components/ConceptTable';
 import { Faq } from './components/Faq';
+import { PrReviewPicker } from './components/PrReviewPicker';
 import { InfoPopover, Toast } from './components/ui';
-import { repoConfigFromEnv, serviceConfigFromEnv } from './github/config';
+import { DATA_REPO, repoConfigFromEnv, serviceConfigFromEnv } from './github/config';
 import { resetSession, submitToService } from './github/submitClient';
 import { clearPr, fetchPullState, loadPr, savePr, type ActivePr } from './github/prSession';
+import type { PullRequest } from './github/pulls';
 import type { Concept } from './types';
 import './App.css';
 
@@ -49,6 +51,11 @@ export default function App() {
   const [activePr, setActivePr] = useState<ActivePr | null>(() => loadPr(localStorage));
   const [reloadKey, setReloadKey] = useState(0); // bump to force a fresh dictionary load
   const [faqOpen, setFaqOpen] = useState(faqFromUrl); // hydrate from #faq so the docs are linkable
+  // PR-review mode: when a PR is selected the table shows ITS diff vs main (read-only); the picker lists
+  // open PRs; "changed only" collapses the view to just the changed rows (the reviewer's main interest).
+  const [reviewPr, setReviewPr] = useState<PullRequest | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [changedOnly, setChangedOnly] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const saveDialogRef = useRef<HTMLDialogElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
@@ -133,8 +140,18 @@ export default function App() {
   const repo = useMemo(() => repoConfigFromEnv(), []);
   const service = useMemo(() => serviceConfigFromEnv(), []);
 
+  // PR-review reads the configured repo, or the canonical data repo as a self-contained default — so the
+  // feature works even in the seed dev server (no env). `review` set → the working set is that PR's diff.
+  const reviewRepo = repo ?? DATA_REPO;
+  const reviewing = reviewPr !== null;
+  const review = useMemo<Review | null>(
+    () => (reviewPr ? { repo: reviewRepo, pr: reviewPr } : null),
+    [reviewPr, reviewRepo],
+  );
+
   // The working set (load + paging + edits) lives in one reducer — no mutable source / parallel state.
-  const [dict, dispatch] = useDictionary(repo, reloadKey);
+  // While reviewing, it loads the PR diff instead of the edit session (read-only; edit cache untouched).
+  const [dict, dispatch] = useDictionary(repo, reloadKey, review);
   const { concepts, loadedCount, baseMap, deletedIds, dirty, conflicts } = dict;
   const ready = dict.status === 'ready';
   const total = concepts.length;
@@ -192,6 +209,23 @@ export default function App() {
   const loadMore = useCallback(() => dispatch({ type: 'loadMore' }), [dispatch]);
 
   const [theme, toggleTheme] = useTheme();
+
+  // Enter read-only PR review: load the selected PR's diff into the table and default to the changed-only
+  // view (the reviewer's primary interest). Any open editor/save prompt is dismissed first.
+  const enterReview = useCallback((pr: PullRequest) => {
+    setEditing(null);
+    setCreating(false);
+    setSavePrompt(false);
+    setReviewPr(pr);
+    setChangedOnly(true);
+    setPickerOpen(false);
+  }, []);
+
+  // Leave review mode — the reducer reloads the user's edit session from the (untouched) local cache.
+  const exitReview = useCallback(() => {
+    setReviewPr(null);
+    setChangedOnly(false);
+  }, []);
 
   // Editing/adding requires a signed-in identity only when a service is configured.
   const gated = useCallback(() => {
@@ -338,20 +372,40 @@ export default function App() {
   const dismissSaveError = useCallback(() => setSaveError(null), []);
 
   // Editing affordances (Add entry / Save / row ✗) are shown only when the user can actually edit:
-  // ungated in local-only mode (no service), otherwise only while signed in.
-  const canEdit = !service || !!identity;
+  // ungated in local-only mode (no service), otherwise only while signed in — and never while reviewing
+  // a PR (that view is read-only).
+  const canEdit = (!service || !!identity) && !reviewing;
 
-  // Filtering searches the WHOLE dictionary and shows every match unpaged, ranked by which cell matched
-  // (concept → speech → area → alias); a stable sort keeps canonical order within each rank. Clearing
-  // the filter resumes the paged prefix.
+  // The view is "restricted" — whole-dictionary, unpaged — when a text filter and/or the "changed only"
+  // toggle is active; otherwise it's the paged prefix. Changed-only keeps rows whose pending change is
+  // non-null (added/changed/deleted). Text matches are additionally ranked by which cell hit (concept →
+  // speech → area → alias); a stable sort keeps canonical order within each rank. Clearing both resumes paging.
   const filtering = filter.trim() !== '';
-  const visible = filtering
+  const restricting = filtering || changedOnly;
+  const visible = restricting
     ? concepts
-        .filter((c) => conceptMatches(c, filter))
-        .map((c) => ({ c, rank: matchRank(c, filter) }))
+        .filter((c) => !changedOnly || changeKind(c) !== null)
+        .filter((c) => !filtering || conceptMatches(c, filter))
+        .map((c) => ({ c, rank: filtering ? matchRank(c, filter) : 0 }))
         .sort((a, b) => a.rank - b.rank)
         .map((x) => x.c)
     : concepts.slice(0, loadedCount);
+  // While reviewing, a compact tally of the PR's diff for the banner (+added ~changed −deleted). Counted
+  // per row (by conceptId, via the same changeKind the table tints with) so it matches the visible rows
+  // exactly — not slug-deduped, so overloaded `(concept, arity)` rows each count.
+  const reviewSummary = useMemo(() => {
+    if (!reviewing) return null;
+    let added = 0,
+      changed = 0,
+      deleted = 0;
+    for (const c of concepts) {
+      const k = changeKind(c);
+      if (k === 'added') added++;
+      else if (k === 'changed') changed++;
+      else if (k === 'deleted') deleted++;
+    }
+    return { added, changed, deleted };
+  }, [reviewing, concepts, changeKind]);
   // Languages present in the dictionary (en first, rest sorted) — the Speech column's dropdown options.
   const languages = useMemo(() => {
     const rest = new Set<string>();
@@ -378,10 +432,21 @@ export default function App() {
           <span className="count" data-testid="concept-count" data-total={total}>
             {filtering
               ? `${visible.length.toLocaleString()} match${visible.length === 1 ? '' : 'es'}`
-              : `${total.toLocaleString()} concepts${
-                  ready && loadedCount < total ? ` · ${loadedCount.toLocaleString()} loaded` : ''
-                }`}
+              : changedOnly
+                ? `${visible.length.toLocaleString()} changed`
+                : `${total.toLocaleString()} concepts${
+                    ready && loadedCount < total ? ` · ${loadedCount.toLocaleString()} loaded` : ''
+                  }`}
           </span>
+          <label className="changed-toggle" title="Show only rows with a pending change">
+            <input
+              type="checkbox"
+              data-testid="changed-only"
+              checked={changedOnly}
+              onChange={(e) => setChangedOnly(e.target.checked)}
+            />
+            Changed only
+          </label>
           <span className="session-status">
             {!service
               ? 'GitHub not configured — local only'
@@ -416,6 +481,14 @@ export default function App() {
                 </InfoPopover>
               </>
             ))}
+          <button
+            type="button"
+            className="review-btn"
+            data-testid="review-pr"
+            onClick={() => setPickerOpen(true)}
+          >
+            Review a PR
+          </button>
           <button type="button" className="faq-btn" onClick={() => setFaqOpen(true)}>
             About / FAQ
           </button>
@@ -439,15 +512,39 @@ export default function App() {
         </p>
       )}
 
+      {reviewing && reviewPr && (
+        <div className="review-banner" role="status" data-testid="review-banner">
+          <span className="review-banner-text">
+            Reviewing{' '}
+            <a href={reviewPr.url} target="_blank" rel="noreferrer">
+              PR #{reviewPr.number}
+            </a>{' '}
+            — {reviewPr.title}
+            {reviewPr.author && ` by @${reviewPr.author}`}
+            {reviewSummary && (
+              <span className="review-tally">
+                {' · '}
+                <span className="tally-add">+{reviewSummary.added}</span>{' '}
+                <span className="tally-changed">~{reviewSummary.changed}</span>{' '}
+                <span className="tally-del">−{reviewSummary.deleted}</span>
+              </span>
+            )}
+          </span>
+          <button type="button" className="review-exit" data-testid="review-exit" onClick={exitReview}>
+            Exit review
+          </button>
+        </div>
+      )}
+
       <div className="body">
         {dict.error && <p className="error">{dict.error}</p>}
         {!ready && !dict.error && <p className="status">Loading dictionary…</p>}
         {ready && (
           <ConceptTable
             data={visible}
-            total={filtering ? visible.length : total}
+            total={restricting ? visible.length : total}
             onEdit={canEdit ? openEditor : undefined}
-            onLoadMore={filtering ? undefined : loadMore}
+            onLoadMore={restricting ? undefined : loadMore}
             editingId={editing ? conceptId(editing) : null}
             onDelete={canEdit ? toggleRowDelete : undefined}
             changeKind={changeKind}
@@ -575,6 +672,13 @@ export default function App() {
       </dialog>
 
       <Faq open={faqOpen} onClose={() => setFaqOpen(false)} />
+
+      <PrReviewPicker
+        repo={reviewRepo}
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onSelect={enterReview}
+      />
 
       {saveError && <Toast message={saveError} onClose={dismissSaveError} />}
     </div>

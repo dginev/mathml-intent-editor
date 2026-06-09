@@ -1247,3 +1247,166 @@
 .mathml math {
   font-size: 1.05em;
 }
+
+/* ---- PR review mode ---- */
+
+/* Toolbar: the "Review a PR" link-button matches the FAQ button; the changed-only toggle sits inline. */
+.review-btn {
+  border: none;
+  background: none;
+  color: var(--link);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0.2rem 0.3rem;
+}
+.changed-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  opacity: 0.8;
+  cursor: pointer;
+  user-select: none;
+}
+.changed-toggle input {
+  cursor: pointer;
+}
+
+/* The banner shown while a PR is under review — a tinted strip below the toolbar (like .conflicts), with
+   a left accent in the "changed" colour to read as a diff context. */
+.review-banner {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  background: var(--diff-changed-bg);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  border-left: 4px solid var(--diff-changed-accent);
+}
+.review-banner-text {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.review-banner a {
+  color: var(--link);
+  font-weight: 600;
+}
+.review-tally {
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+.review-tally .tally-add {
+  color: var(--diff-add-accent);
+}
+.review-tally .tally-changed {
+  color: var(--diff-changed-accent);
+}
+.review-tally .tally-del {
+  color: var(--diff-del-accent);
+}
+.review-exit {
+  flex: 0 0 auto;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+/* PR picker dialog — reuses .modal; sized like the save modal. */
+.modal.pr-picker {
+  width: min(640px, 94vw);
+}
+.pr-picker-body h2 {
+  font-size: 1rem;
+  margin: 0 0 0.4rem;
+}
+.pr-picker-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.pr-picker-error {
+  font-size: 0.85rem;
+  color: var(--danger-text);
+}
+.pr-picker-error button {
+  margin-top: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.pr-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 60vh;
+  overflow: auto;
+}
+.pr-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.pr-item:hover {
+  border-color: var(--diff-changed-accent);
+  background: var(--surface);
+}
+.pr-item .pr-num {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+.pr-item .pr-title {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pr-item .pr-meta {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.pr-picker .actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.8rem;
+}
+.pr-picker .actions button {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
