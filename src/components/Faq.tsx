@@ -156,6 +156,19 @@ export function Faq({ open, onClose }: { open: boolean; onClose: () => void }) {
           edit starts a fresh branch (and a fresh PR).
         </p>
 
+        <h3>Can I review a pull request?</h3>
+        <p>
+          Yes &mdash; click <em>Review a PR</em> in the header and pick an open or closed one. Its
+          proposed changes to the dictionary render straight into the table, as <strong>added</strong>{' '}
+          (green), <strong>edited</strong> (purple) and <strong>deleted</strong> (red) rows, and{' '}
+          <em>Changed only</em> collapses the view to just those. The expand button (
+          <span aria-hidden="true">⤢</span>) on a row opens the full entry, showing each changed field
+          as an old&nbsp;&rarr;&nbsp;new diff. An <strong>open</strong> PR is compared against the
+          current dictionary; a <strong>closed or merged</strong> one against the commit it branched
+          from, so you see that PR&rsquo;s own historical contribution. Reviewing is read-only and needs
+          no sign-in.
+        </p>
+
         <h3>How do I revoke access?</h3>
         <p>
           Any time, on GitHub, under <em>Settings → Applications → Authorized GitHub Apps</em>: revoke

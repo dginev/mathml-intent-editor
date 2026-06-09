@@ -33,6 +33,9 @@ describe('Faq', () => {
     expect(dialog).toHaveTextContent(/how do i edit a concept/i);
     expect(dialog).toHaveTextContent(/nothing reaches github until/i); // Done ≠ Save, the key confusion
     expect(dialog).toHaveTextContent(/accessible readouts/i); // the "what" in one breath
+    // The PR-review feature: how to open it + the open-vs-closed comparison point.
+    expect(dialog).toHaveTextContent(/can i review a pull request/i);
+    expect(dialog).toHaveTextContent(/historical contribution/i);
     // …and the deep dive: a real link to the MathML Intent spec.
     const spec = screen.getByRole('link', { name: /mathml intent/i });
     expect(spec.getAttribute('href')).toContain('w3c.github.io');
