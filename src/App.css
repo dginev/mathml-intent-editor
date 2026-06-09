@@ -384,13 +384,25 @@
 }
 
 /* Per-row icon actions: edit (✎) and delete/restore (✗ / ↺), spaced apart. */
+/* Each action kind (⤢ expand / ✎ edit / ✗ delete) sits in its own fixed-width sub-column so the icons
+   align into clean vertical columns across rows; an absent action renders an empty slot, never collapses. */
 .row-actions {
-  display: flex;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 2rem; /* every sub-column the same fixed width */
+  justify-content: center;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.35rem;
+  width: 100%;
+  height: 100%;
 }
 .row-edit,
-.row-x {
+.row-x,
+.row-view,
+.row-slot {
+  box-sizing: border-box;
+  width: 2rem; /* fill the sub-column → the glyph is centred within it */
+  min-height: 28px; /* ≥ the WCAG 2.5.8 24px minimum target size */
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -400,10 +412,11 @@
   cursor: pointer;
   font-size: 1.35rem; /* 1.5× the old 0.9rem — the icons were a fiddly click target */
   line-height: 1;
-  padding: 0.2rem 0.35rem;
-  min-width: 28px; /* ≥ the WCAG 2.5.8 24px minimum target size */
-  min-height: 28px;
+  padding: 0.2rem 0;
   border-radius: 6px;
+}
+.row-slot {
+  cursor: default; /* an empty placeholder column — reserves space, no interaction */
 }
 .row-edit:hover {
   color: var(--accent);
@@ -631,6 +644,102 @@
 .notation-editor .field textarea {
   width: 100%;
   box-sizing: border-box;
+}
+
+/* Read-only "view" — the same editor with editing toggled off (the row ⤢ / full-entry preview). Field
+   labels read as compact detail-view captions; values render as plain text instead of inputs. */
+.notation-editor.read-only .field > span:first-child,
+.notation-editor.read-only .field-head {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+.field-value {
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+/* Review view: each field renders an old→new diff. A removed/old value is struck through in red, the new
+   value is green, with an arrow between. Used for scalars, speech, link/alias lists and notation sources. */
+.diff-del {
+  color: var(--diff-del-accent);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+.diff-add {
+  color: var(--diff-add-accent);
+  text-decoration: none;
+}
+a.link-display.diff-add {
+  color: var(--diff-add-accent);
+}
+.diff-arrow {
+  color: var(--text-muted);
+  margin: 0 0.4rem;
+}
+.value-diff {
+  overflow-wrap: anywhere;
+}
+/* A notation's MathML source as a unified line-by-line diff: removed lines red, added green, context
+   plain — each line keeps its syntax highlighting, with a +/− gutter. */
+.mathml-source-diff {
+  padding: 0.5rem 0.3rem;
+}
+.mathml-source-diff .diff-line {
+  display: block;
+  padding-left: 0.2rem;
+}
+.mathml-source-diff .diff-gutter {
+  display: inline-block;
+  width: 1ch;
+  margin-right: 0.4rem;
+  color: var(--text-muted);
+  user-select: none;
+}
+.mathml-source-diff .diff-line-del {
+  background: var(--diff-del-bg);
+}
+.mathml-source-diff .diff-line-add {
+  background: var(--diff-add-bg);
+}
+.mathml-source-diff .diff-line-del .diff-gutter {
+  color: var(--diff-del-accent);
+}
+.mathml-source-diff .diff-line-add .diff-gutter {
+  color: var(--diff-add-accent);
+}
+.alias-chip.removed {
+  border-style: dashed;
+}
+
+/* Read-only view lays the Notation block (left) beside the Speech hints (right), filling the otherwise
+   empty space; while editing, the wrapper is a single-column grid so they stack as before. */
+.ns-split {
+  display: grid;
+}
+.notation-editor.read-only .ns-split {
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1.5rem;
+  align-items: start;
+}
+.notation-editor.read-only .ns-split > .notation-block {
+  order: -1; /* Notation on the left, Speech on the right */
+}
+.notation-editor.read-only .ns-split .previews {
+  grid-template-columns: 1fr; /* stack Rendered / TeX / MathML source in the half-width column */
+  margin: 0.4rem 0 0;
+}
+/* Authored TeX source shown in the read-only view (monospace, like the MathML source). */
+.tex-source {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--code-bg);
+  border-radius: 4px;
+  padding: 0.4rem 0.5rem;
 }
 
 .info-wrap {
@@ -1246,4 +1355,208 @@
 
 .mathml math {
   font-size: 1.05em;
+}
+
+/* ---- PR review mode ---- */
+
+/* Toolbar: the "Review a PR" link-button matches the FAQ button; the changed-only toggle sits inline. */
+.review-btn {
+  border: none;
+  background: none;
+  color: var(--link);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0.2rem 0.3rem;
+}
+.changed-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  opacity: 0.8;
+  cursor: pointer;
+  user-select: none;
+}
+.changed-toggle input {
+  cursor: pointer;
+}
+
+/* The banner shown while a PR is under review — a tinted strip below the toolbar (like .conflicts), with
+   a left accent in the "changed" colour to read as a diff context. */
+.review-banner {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  background: var(--diff-changed-bg);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  border-left: 4px solid var(--diff-changed-accent);
+}
+.review-banner-text {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.review-banner a {
+  color: var(--link);
+  font-weight: 600;
+}
+.review-tally {
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+.review-tally .tally-add {
+  color: var(--diff-add-accent);
+}
+.review-tally .tally-changed {
+  color: var(--diff-changed-accent);
+}
+.review-tally .tally-del {
+  color: var(--diff-del-accent);
+}
+.review-exit {
+  flex: 0 0 auto;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+/* PR picker dialog — reuses .modal; sized like the save modal. */
+.modal.pr-picker {
+  width: min(640px, 94vw);
+}
+.pr-picker-body h2 {
+  font-size: 1rem;
+  margin: 0 0 0.4rem;
+}
+.pr-picker-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.pr-picker-error {
+  font-size: 0.85rem;
+  color: var(--danger-text);
+}
+.pr-picker-error button {
+  margin-top: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.pr-group {
+  margin-bottom: 0.8rem;
+}
+.pr-group-head {
+  margin: 0 0 0.4rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.pr-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 32vh;
+  overflow: auto;
+}
+/* Closed/merged state chip on a PR row and in the review banner. */
+.pr-tag,
+.review-state {
+  flex: 0 0 auto;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+}
+.pr-tag.merged,
+.review-state.merged {
+  background: var(--diff-changed-bg);
+  color: var(--diff-changed-accent);
+}
+.pr-tag.closed,
+.review-state.closed {
+  background: var(--diff-del-bg);
+  color: var(--diff-del-accent);
+}
+.review-vs {
+  color: var(--text-muted);
+}
+.pr-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.pr-item:hover {
+  border-color: var(--diff-changed-accent);
+  background: var(--surface);
+}
+.pr-item .pr-num {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+.pr-item .pr-title {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pr-item .pr-meta {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.pr-picker .actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.8rem;
+}
+.pr-picker .actions button {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+
+/* "More to see" affordance — opens the full-entry preview; sits beside ✎/✗ (or alone while reviewing). */
+.row-view:hover {
+  color: var(--accent);
+  background: var(--hover);
 }

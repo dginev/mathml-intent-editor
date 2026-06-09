@@ -1,11 +1,14 @@
 import { useEffect, useReducer, type Dispatch } from 'react';
 import { loadDictionary } from '../data/loadDictionary';
 import { loadSeed } from '../data/loadSeed';
+import { loadPrReview } from '../data/loadPrReview';
 import { loadEdits, saveEdits } from '../data/editCache';
 import { conceptId } from '../data/conceptId';
 import { byConcept, serializeConcepts } from '../data/serialize';
 import { computeEdits, deletedIdsFromEdits, effectiveYaml, type BaseMap } from '../data/pendingChanges';
 import { loadPr } from '../github/prSession';
+import type { PullRequest } from '../github/pulls';
+import type { RepoConfig } from '../github/config';
 import type { Concept } from '../types';
 
 /** Clone the small synthetic seed fixture this many times to exercise the table at the 10k+ row target. */
@@ -13,7 +16,8 @@ const DEV_MULTIPLIER = 1200;
 /** Rows revealed per page — the initial load and each page-down increment (~a couple of viewports). */
 const PAGE = 50;
 
-type RepoConfig = { owner: string; repo: string; baseBranch: string; filePath: string };
+/** When set, the working set is loaded read-only from a PR's diff instead of the edit session. */
+export type Review = { repo: RepoConfig; pr: PullRequest };
 
 /**
  * The working set as one immutable value: the full `concepts` list (canonical order, including
@@ -137,11 +141,14 @@ function reduce(s: DictState, a: DictAction): DictState {
 /**
  * Load + maintain the working set. Reads the base from GitHub (the active PR branch when one is tracked,
  * else `main`) reconciled with the local edit cache, or the seed fixture when no repo is configured.
- * `reloadKey` forces a fresh load (sign-out, PR-close reset). Returns `[state, dispatch]`.
+ * `reloadKey` forces a fresh load (sign-out, PR-close reset). When `review` is set, the working set is
+ * instead loaded **read-only** from that PR's diff against `main` — the user's edit cache is left intact
+ * (persistence pauses) and restored on exit. Returns `[state, dispatch]`.
  */
 export function useDictionary(
   repo: RepoConfig | null,
   reloadKey: number,
+  review: Review | null = null,
 ): readonly [DictState, Dispatch<DictAction>] {
   const [state, dispatch] = useReducer(reduce, initial);
 
@@ -150,7 +157,12 @@ export function useDictionary(
     dispatch({ type: 'loading' });
     void (async () => {
       try {
-        if (repo) {
+        if (review) {
+          // Read-only PR review: main + the PR head reduced to the same {concepts, base, deletedIds}
+          // triple the edit session produces, so the table's change-marking renders the PR's diff.
+          const { concepts, base, deletedIds } = await loadPrReview({ ...review.repo, pr: review.pr });
+          if (live) dispatch({ type: 'loaded', concepts, base, deletedIds, conflicts: [] });
+        } else if (repo) {
           const edits = loadEdits(localStorage);
           const { concepts, conflicts, base } = await loadDictionary({
             ...repo,
@@ -173,14 +185,15 @@ export function useDictionary(
     return () => {
       live = false;
     };
-  }, [repo, reloadKey]);
+  }, [repo, reloadKey, review]);
 
   // Persist the edit cache as a pure derivation of the working set (covers reload + raw-CDN lag).
+  // Paused while reviewing a PR — its diff is not the user's edits, and must not overwrite their cache.
   useEffect(() => {
-    if (state.status === 'ready') {
+    if (!review && state.status === 'ready') {
       saveEdits(localStorage, computeEdits(state.concepts, state.deletedIds, state.baseMap));
     }
-  }, [state.status, state.concepts, state.deletedIds, state.baseMap]);
+  }, [review, state.status, state.concepts, state.deletedIds, state.baseMap]);
 
   return [state, dispatch];
 }

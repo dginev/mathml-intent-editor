@@ -13,6 +13,19 @@ export type RepoConfig = { owner: string; repo: string; baseBranch: string; file
  */
 const env = import.meta.env as unknown as Record<string, string | undefined>;
 
+/**
+ * The canonical public backing repo. Used as the self-contained default target for the PR-review feature
+ * so it works even in the seed dev server (no env): reviewing reads `main` + a PR head from raw directly,
+ * independent of whether the rest of the app is in seed or live mode. In production `repoConfigFromEnv()`
+ * resolves to the same values.
+ */
+export const DATA_REPO: RepoConfig = {
+  owner: 'dginev',
+  repo: 'mathml-intent-open',
+  baseBranch: 'main',
+  filePath: 'open.yml',
+};
+
 export function repoConfigFromEnv(): RepoConfig | null {
   const owner = env.VITE_GH_OWNER;
   const repo = env.VITE_GH_REPO;

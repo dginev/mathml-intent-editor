@@ -84,6 +84,19 @@ function tokenize(src: string): Tok[] {
   return toks;
 }
 
+/** Render one already-formatted source line's tokens (syntax-highlighted). */
+function renderLine(text: string) {
+  return tokenize(text).map((t, i) =>
+    t.cls ? (
+      <span key={i} className={t.cls}>
+        {t.text}
+      </span>
+    ) : (
+      <Fragment key={i}>{t.text}</Fragment>
+    ),
+  );
+}
+
 /**
  * The literal MathML source, lightly syntax-highlighted, with the `intent=`/`arg=` annotations
  * emphasized — complements the rendered preview by showing exactly what will be written.
@@ -102,6 +115,63 @@ export function MathMLSource({ markup }: { markup: string }) {
             <Fragment key={i}>{t.text}</Fragment>
           ),
         )}
+      </code>
+    </pre>
+  );
+}
+
+type DiffLine = { type: 'same' | 'del' | 'add'; text: string };
+
+/** A minimal LCS line diff (inputs are a few formatted lines, so O(n·m) is fine). */
+function lineDiff(before: string[], after: string[]): DiffLine[] {
+  const n = before.length;
+  const m = after.length;
+  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      dp[i][j] = before[i] === after[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const out: DiffLine[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (before[i] === after[j]) {
+      out.push({ type: 'same', text: before[i] });
+      i++;
+      j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      out.push({ type: 'del', text: before[i++] });
+    } else {
+      out.push({ type: 'add', text: after[j++] });
+    }
+  }
+  while (i < n) out.push({ type: 'del', text: before[i++] });
+  while (j < m) out.push({ type: 'add', text: after[j++] });
+  return out;
+}
+
+const GUTTER: Record<DiffLine['type'], string> = { same: ' ', del: '−', add: '+' };
+
+/**
+ * A unified line-by-line diff of two MathML sources — both pretty-printed, then LCS-diffed by line.
+ * Removed lines read red, added lines green, unchanged lines provide context; each line keeps its
+ * syntax highlighting. Compact enough to sit in the read-only view's notation column.
+ */
+export function MathMLSourceDiff({ before, after }: { before: string; after: string }) {
+  const lines = useMemo(
+    () => lineDiff(formatMathml(before).split('\n'), formatMathml(after).split('\n')),
+    [before, after],
+  );
+  return (
+    <pre className="mathml-source mathml-source-diff" data-testid="mathml-source-diff">
+      <code>
+        {lines.map((ln, i) => (
+          <div key={i} className={`diff-line diff-line-${ln.type}`}>
+            <span className="diff-gutter" aria-hidden="true">
+              {GUTTER[ln.type]}
+            </span>
+            {renderLine(ln.text)}
+          </div>
+        ))}
       </code>
     </pre>
   );

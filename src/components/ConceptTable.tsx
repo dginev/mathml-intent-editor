@@ -16,6 +16,10 @@ const columnHelper = createColumnHelper<Concept>();
 type TableMeta = {
   onEdit?: (c: Concept) => void;
   onDelete?: (c: Concept) => void;
+  /** Open a read-only full-entry preview (the row's "more to see" affordance). */
+  onView?: (c: Concept) => void;
+  /** Gate the affordance to rows whose preview adds something the row hides (always true while reviewing). */
+  canView?: (c: Concept) => boolean;
   changeKind?: (c: Concept) => ChangeKind | null;
   /** Loaded once any visible row has `tex`; lets the Notation cell re-render the rich form (else stored). */
   engine?: TemmlEngine | null;
@@ -105,7 +109,7 @@ const columns = [
   columnHelper.display({
     id: 'notation',
     header: 'Notation',
-    size: 320,
+    size: 160,
     // Re-render the rich MathML from `tex` when present (else the stored, minified mathml). The engine
     // rides in on `meta`; until it loads (or for tex-less rows) `notationMarkup` returns the stored form.
     cell: ({ row, table }) => {
@@ -137,15 +141,39 @@ const columns = [
   columnHelper.display({
     id: 'actions',
     header: '',
-    size: 96, // fits the two 1.5×-sized icon buttons without clipping (.td clips overflow)
+    size: 132, // fits up to three 1.5×-sized icon buttons (⤢ ✎ ✗) without clipping (.td clips overflow)
     cell: ({ row, table }) => {
       const meta = table.options.meta as TableMeta | undefined;
       const onEdit = meta?.onEdit;
       const onDelete = meta?.onDelete;
-      if (!onEdit && !onDelete) return null; // hidden unless editing is allowed (signed in)
-      const deleted = meta?.changeKind?.(row.original) === 'deleted';
+      const onView = meta?.onView;
+      const kind = meta?.changeKind?.(row.original) ?? null;
+      // Offer the preview when it would reveal something the row can't (per `canView`). The predicate is
+      // passed the row's `kind` so it can short-circuit cheaply — in review mode unchanged rows return
+      // `false` without running the full check.
+      const showView = !!onView && (!meta?.canView || meta.canView(row.original));
+      if (!onEdit && !onDelete && !onView) return null; // actions disabled for this view entirely
+      const deleted = kind === 'deleted';
+      // Each action KIND gets its own fixed-width sub-column so the icons line up into clean vertical
+      // columns across rows. When a kind doesn't apply to a row (e.g. no "more to see"), its slot renders
+      // an empty placeholder rather than collapsing — which would shift the neighbours. The set of slots
+      // is uniform within a view (onView/onEdit/onDelete are table-wide), so columns stay aligned.
       return (
         <span className="row-actions">
+          {onView &&
+            (showView ? (
+              <button
+                type="button"
+                className="row-view"
+                aria-label={`Show full entry: ${row.original.slug} (more details)`}
+                title="More details — show the full entry"
+                onClick={() => onView(row.original)}
+              >
+                ⤢
+              </button>
+            ) : (
+              <span className="row-slot" aria-hidden="true" />
+            ))}
           {onEdit && (
             <button
               type="button"
@@ -186,6 +214,8 @@ export function ConceptTable({
   onLoadMore,
   editingId,
   onDelete,
+  onView,
+  canView,
   changeKind,
   headerActions,
   languages,
@@ -203,6 +233,10 @@ export function ConceptTable({
   editingId?: string | null;
   /** Per-row delete/restore (the ✗ / ↺ button). */
   onDelete?: (concept: Concept) => void;
+  /** Per-row read-only full-entry preview (the "more to see" affordance). */
+  onView?: (concept: Concept) => void;
+  /** Gate it to rows whose preview adds something beyond the row (returns false → no button). */
+  canView?: (concept: Concept) => boolean;
   /** Classify a row's pending change (added / changed / deleted) for its background colour. */
   changeKind?: (concept: Concept) => ChangeKind | null;
   /** Buttons rendered as a phantom rightmost column in the sticky header (Add entry + batch Save). */
@@ -244,7 +278,7 @@ export function ConceptTable({
     columns,
     getCoreRowModel: getCoreRowModel(),
     state: { columnSizing: { slug: slugWidth } },
-    meta: { onEdit, onDelete, changeKind, engine, languages, speechLang, onSpeechLangChange },
+    meta: { onEdit, onDelete, onView, canView, changeKind, engine, languages, speechLang, onSpeechLangChange },
   });
 
   const rows = table.getRowModel().rows;

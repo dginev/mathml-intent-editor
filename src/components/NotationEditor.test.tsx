@@ -385,3 +385,106 @@ describe('NotationEditor', () => {
     expect(screen.getByTestId('alias-warning')).toHaveTextContent('union');
   });
 });
+
+describe('NotationEditor — read-only view (the row ⤢ reuses the editor)', () => {
+  const rich: Concept = {
+    slug: 'power',
+    arity: 2,
+    en: 'power of $base to $exponent',
+    area: 'arithmetic',
+    property: 'function',
+    notations: [
+      { tex: 'x^{n}', mathml: '<math><msup><mi>x</mi><mi>n</mi></msup></math>' },
+      { mathml: '<math><mi>secondary</mi></math>' },
+    ],
+    links: ['https://w3.org/'],
+    alias: ['exponentiation'],
+    speech: [{ lang: 'de', text: 'Potenz' }],
+  };
+
+  it('renders every field as read-only display — no inputs anywhere, only a Close button', () => {
+    const onCancel = vi.fn();
+    const { container } = render(<NotationEditor concept={rich} readOnly onCancel={onCancel} />);
+
+    // Heading reads "View", and the scalar fields are plain text, not inputs.
+    expect(screen.getByRole('heading')).toHaveTextContent('View concept: power');
+    expect(screen.getByTestId('slug-value')).toHaveTextContent('power');
+    expect(screen.getByTestId('property-value')).toHaveTextContent('function');
+    expect(container.querySelectorAll('input, textarea')).toHaveLength(0); // all editing surfaces gone
+    expect(screen.queryByTestId('slug-input')).toBeNull();
+    expect(screen.queryByTestId('tex-input')).toBeNull();
+
+    // Secondary info still shows: both speech languages, the extra notation, the alias, the link.
+    expect(screen.getByText('power of $base to $exponent')).toBeInTheDocument();
+    expect(screen.getByText('Potenz')).toBeInTheDocument();
+    expect(screen.getAllByTestId('lang-badge').map((b) => b.textContent)).toEqual(['en', 'de']);
+    expect(screen.getByTestId('notation-list')).toBeInTheDocument(); // the additional notation block
+    expect(screen.getByTestId('alias-chip')).toHaveTextContent('exponentiation');
+    expect(screen.getByRole('link', { name: 'https://w3.org/' })).toBeInTheDocument();
+
+    // No editing affordances at all.
+    expect(screen.queryByTestId('save')).toBeNull(); // no Done
+    expect(screen.queryByTestId('delete')).toBeNull(); // no Delete
+    expect(screen.queryByRole('button', { name: /Add (language|link|alias|notation)/ })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'TeX' })).toBeNull(); // no mode toggle
+
+    // Only Close, and it calls onCancel.
+    fireEvent.click(screen.getByTestId('close'));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits empty optional sections (no aliases/links → those blocks are hidden)', () => {
+    const minimal: Concept = { slug: 'plain', arity: 0, en: 'plain', notations: [{ mathml: '<math><mi>p</mi></math>' }], links: [], alias: [] };
+    render(<NotationEditor concept={minimal} readOnly onCancel={vi.fn()} />);
+    expect(screen.queryByTestId('alias-list')).toBeNull();
+    expect(screen.queryByTestId('link-list')).toBeNull();
+    expect(screen.queryByTestId('notation-list')).toBeNull(); // no additional notations
+  });
+
+  // The main (pre-PR) version of `rich`: older property/speech/alias/links, so each field shows a diff.
+  const richBase: Concept = {
+    ...rich,
+    property: 'indexed',
+    en: 'power of $1 to $2',
+    speech: [{ lang: 'de', text: 'alte Potenz' }],
+    alias: [],
+    links: ['https://w3.org/', 'https://old.example/'],
+  };
+
+  it('renders an old→new diff (red removed / green added) for each changed field in a review view', () => {
+    render(<NotationEditor concept={rich} readOnly base={richBase} onCancel={vi.fn()} />);
+
+    // Scalar: property indexed → function.
+    expect(screen.getByText('indexed').tagName).toBe('DEL');
+    expect(screen.getByText('function').tagName).toBe('INS');
+    // Speech (en + de) each diffed.
+    expect(screen.getByText('power of $1 to $2').tagName).toBe('DEL');
+    expect(screen.getByText('power of $base to $exponent').tagName).toBe('INS');
+    expect(screen.getByText('alte Potenz').tagName).toBe('DEL');
+    expect(screen.getByText('Potenz').tagName).toBe('INS');
+    // A removed link is struck through; a brand-new alias reads as added.
+    expect(screen.getByText('https://old.example/').closest('del')).not.toBeNull();
+    expect(screen.getByTestId('alias-chip')).toHaveClass('diff-add');
+    // An unchanged field (area) is plain — not wrapped in del/ins.
+    expect(screen.getByText('arithmetic').tagName).not.toBe('DEL');
+    expect(screen.getByText('arithmetic').tagName).not.toBe('INS');
+  });
+
+  it('renders no diff markup without a base (plain browse view)', () => {
+    render(<NotationEditor concept={rich} readOnly onCancel={vi.fn()} />);
+    expect(document.querySelector('del, ins')).toBeNull();
+  });
+
+  it('shows the TeX source when a notation has TeX, and drops the redundant "Notation" head label', () => {
+    render(<NotationEditor concept={rich} readOnly onCancel={vi.fn()} />);
+    expect(screen.getByTestId('tex-source')).toHaveTextContent('x^{n}'); // the primary's authored TeX
+    expect(screen.queryByText('Notation', { exact: true })).toBeNull(); // head label hidden
+    expect(screen.queryByText('Notation (primary)')).toBeNull();
+  });
+
+  it('hides the TeX-source panel for a notation authored as raw MathML (no tex)', () => {
+    const noTex: Concept = { slug: 'x', arity: 0, en: 'x', notations: [{ mathml: '<math><mi>x</mi></math>' }], links: [], alias: [] };
+    render(<NotationEditor concept={noTex} readOnly onCancel={vi.fn()} />);
+    expect(screen.queryByTestId('tex-source')).toBeNull();
+  });
+});
