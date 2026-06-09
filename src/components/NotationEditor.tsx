@@ -42,7 +42,7 @@ type NotationDraft = {
   out: string | null;
   /** Rich form for the Rendered panel (TeX keeps Temml's cosmetics; raw shows as typed). */
   display: string | null;
-  /** What the file will hold — the "MathML source (simplified)" panel. */
+  /** What the file will hold — the "MathML source" panel. */
   source: string | null;
   error: string | null;
   /** True while this notation can't be saved (render error, malformed XML, engine still loading). */
@@ -80,6 +80,28 @@ function deriveNotation(
   }
   return { empty: false, out: m, display: m, source: m, error: null, blocks: false };
 }
+/**
+ * Render a scalar field's old→new change for the review diff view: a removed/old value is struck through
+ * in red, the new value is green, with an arrow between when both are present (a pure add is green only,
+ * a pure removal red only). Unchanged → the value as-is.
+ */
+function ValueDiff({ before, after }: { before?: string | null; after?: string | null }) {
+  const b = (before ?? '').trim();
+  const a = (after ?? '').trim();
+  if (b === a) return <>{a || '—'}</>;
+  return (
+    <span className="value-diff">
+      {b && <del className="diff-del">{b}</del>}
+      {b && a && (
+        <span className="diff-arrow" aria-hidden="true">
+          →
+        </span>
+      )}
+      {a && <ins className="diff-add">{a}</ins>}
+    </span>
+  );
+}
+
 /** A fresh speech row — the first one defaults to English, later ones start with an empty code. */
 const blankSpeech = (rows: SpeechRow[]) => ({
   lang: rows.some((r) => r.lang.trim() === 'en') ? '' : 'en',
@@ -220,6 +242,9 @@ function NotationAuthor({
   onMathml,
   onRemove,
   testId,
+  readOnly = false,
+  beforeTex,
+  beforeMathml,
 }: {
   label: ReactNode;
   mode: 'tex' | 'mathml';
@@ -236,65 +261,77 @@ function NotationAuthor({
   /** Present on extras only — the ✕ that removes the whole block. */
   onRemove?: () => void;
   testId?: string;
+  /** View-only: drop the mode toggle, source textarea and remove control — keep just the previews. */
+  readOnly?: boolean;
+  /** Review diff (read-only): the main version's TeX / stored MathML — the "before" side of each source
+   *  diff. When provided, the TeX and MathML source panels render old→new (red removed / green added). */
+  beforeTex?: string;
+  beforeMathml?: string;
 }) {
   const display = draft.display ?? fallback;
   const source = draft.source ?? fallback;
+  const diffSource = beforeTex != null || beforeMathml != null; // a review diff is in effect
+  const mathChanged = (beforeMathml ?? '').trim() !== (source ?? '').trim();
   return (
     <div className="notation-block" data-testid={testId}>
-      <div className="field">
-        <span className="notation-head">
-          {label}
-          <span className="mode-toggle" role="tablist" aria-label="Notation input mode">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === 'tex'}
-              className={mode === 'tex' ? 'active' : ''}
-              onClick={() => onMode('tex')}
-            >
-              TeX
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === 'mathml'}
-              className={mode === 'mathml' ? 'active' : ''}
-              onClick={() => onMode('mathml')}
-            >
-              Raw MathML
-            </button>
+      {/* The authoring head (label + mode toggle + source textarea) is editing-only. In a read-only view
+          the label is dropped — the sub-labels (Rendered / TeX source / MathML source) make it clear. */}
+      {!readOnly && (
+        <div className="field">
+          <span className="notation-head">
+            {label}
+            <span className="mode-toggle" role="tablist" aria-label="Notation input mode">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === 'tex'}
+                className={mode === 'tex' ? 'active' : ''}
+                onClick={() => onMode('tex')}
+              >
+                TeX
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === 'mathml'}
+                className={mode === 'mathml' ? 'active' : ''}
+                onClick={() => onMode('mathml')}
+              >
+                Raw MathML
+              </button>
+            </span>
+            {mode === 'tex' && (
+              <InfoPopover label="Macro help">
+                <MacroLegend />
+              </InfoPopover>
+            )}
+            {onRemove && (
+              <IconButton className="icon-btn remove-notation" label="Remove notation" icon="×" title="Remove" onClick={onRemove} />
+            )}
           </span>
-          {mode === 'tex' && (
-            <InfoPopover label="Macro help">
-              <MacroLegend />
-            </InfoPopover>
+          {mode === 'tex' ? (
+            <textarea
+              data-testid={testId ? `${testId}-tex` : 'tex-input'}
+              aria-label="Notation TeX"
+              value={tex}
+              spellCheck={false}
+              rows={2}
+              placeholder={'-\\arg{x}{n}'}
+              onChange={(e) => onTex(e.target.value)}
+            />
+          ) : (
+            <textarea
+              data-testid={testId ? `${testId}-mathml` : 'mathml-input'}
+              aria-label="Raw MathML"
+              value={mathml}
+              spellCheck={false}
+              rows={onRemove ? 4 : 15}
+              placeholder="<math>…</math>"
+              onChange={(e) => onMathml(e.target.value)}
+            />
           )}
-          {onRemove && (
-            <IconButton className="icon-btn remove-notation" label="Remove notation" icon="×" title="Remove" onClick={onRemove} />
-          )}
-        </span>
-        {mode === 'tex' ? (
-          <textarea
-            data-testid={testId ? `${testId}-tex` : 'tex-input'}
-            aria-label="Notation TeX"
-            value={tex}
-            spellCheck={false}
-            rows={2}
-            placeholder={'-\\arg{x}{n}'}
-            onChange={(e) => onTex(e.target.value)}
-          />
-        ) : (
-          <textarea
-            data-testid={testId ? `${testId}-mathml` : 'mathml-input'}
-            aria-label="Raw MathML"
-            value={mathml}
-            spellCheck={false}
-            rows={onRemove ? 4 : 15}
-            placeholder="<math>…</math>"
-            onChange={(e) => onMathml(e.target.value)}
-          />
-        )}
-      </div>
+        </div>
+      )}
       {draft.error ? (
         <span className="error" role="alert" data-testid={testId ? `${testId}-error` : 'error'}>
           {draft.error}
@@ -311,9 +348,36 @@ function NotationAuthor({
               </span>
             )}
           </div>
+          {/* The authored TeX source — read-only only, when this notation (or its main version) has TeX.
+              In a review diff it renders old→new (red removed / green added). */}
+          {readOnly && (tex.trim() !== '' || (beforeTex ?? '').trim() !== '') && (
+            <div className="preview-cell">
+              <span className="preview-label">TeX source</span>
+              <code className="tex-source" data-testid={testId ? `${testId}-texsrc` : 'tex-source'}>
+                {diffSource ? <ValueDiff before={beforeTex} after={tex} /> : tex}
+              </code>
+            </div>
+          )}
           <div className="preview-cell">
-            <span className="preview-label">MathML source (simplified)</span>
-            {source ? <MathMLSource markup={source} /> : <span className="hint">—</span>}
+            <span className="preview-label">MathML source</span>
+            {diffSource && mathChanged ? (
+              <div className="mathml-diff">
+                {(beforeMathml ?? '').trim() !== '' && (
+                  <div className="mathml-side mathml-old">
+                    <MathMLSource markup={beforeMathml!} />
+                  </div>
+                )}
+                {(source ?? '').trim() !== '' && (
+                  <div className="mathml-side mathml-new">
+                    <MathMLSource markup={source!} />
+                  </div>
+                )}
+              </div>
+            ) : source ? (
+              <MathMLSource markup={source} />
+            ) : (
+              <span className="hint">—</span>
+            )}
           </div>
         </div>
       )}
@@ -334,9 +398,11 @@ export function NotationEditor({
   onDirtyChange,
   knownSlugs = NO_SLUGS,
   index,
+  readOnly = false,
+  base,
 }: {
   concept: Concept;
-  onSave: (updated: Concept) => void;
+  onSave?: (updated: Concept) => void;
   onDelete?: () => void;
   onCancel?: () => void;
   /** Reports whether the editor holds unsaved content changes (App's dismissal guard listens). */
@@ -345,6 +411,12 @@ export function NotationEditor({
   knownSlugs?: ReadonlySet<string>;
   /** Dictionary-wide index powering the "related concepts" overview + alias-collision warnings. */
   index?: ConceptIndex;
+  /** View-only mode: every field renders as read-only display, all editing/interactivity is removed, and
+   *  the footer offers only "Close". Reuses the whole editor as the "expand"/full-entry preview. */
+  readOnly?: boolean;
+  /** In a review view, the `main` version of this entry — when set, each field renders an old→new diff
+   *  (removed values red/struck, added values green) so a reviewer sees how each field changed. */
+  base?: Concept;
 }) {
   const isNew = concept.slug === ''; // a brand-new row (opened via "Add entry") starts slug-less
   const [slug, setSlug] = useState(concept.slug);
@@ -501,60 +573,102 @@ export function NotationEditor({
   const [initialContent] = useState(() => contentState);
   const dirty = contentState !== initialContent;
   useEffect(() => {
-    onDirtyChange?.(dirty);
-  }, [dirty, onDirtyChange]);
+    if (!readOnly) onDirtyChange?.(dirty); // a view never reports dirtiness (nothing can change)
+  }, [dirty, onDirtyChange, readOnly]);
   // Done is unavailable while invalid (canSave) or while there is nothing to stage (dirty) — but via
   // aria-disabled, never the native attribute: a disabled button drops out of the tab order, so a
   // screen-reader user tabbing the dialog never finds it (round-3 feedback). aria-disabled keeps it
   // focusable and announced as unavailable; the onClick guard makes it inert.
   const saveDisabled = !canSave || !dirty;
 
+  // A review view diffs each field against `base` (the main version); a plain browse view just displays.
+  const diffing = readOnly && base != null;
+  // The main version's speech, keyed by language (English under `en`) — the "before" side of a speech diff.
+  const baseSpeech = useMemo(() => {
+    const m = new Map<string, string>();
+    if (base?.en != null) m.set('en', base.en);
+    for (const s of base?.speech ?? []) m.set(s.lang, s.text);
+    return m;
+  }, [base]);
+  // The main version's links/aliases as sets — to mark added items (green) and list removed ones (red).
+  const baseLinks = useMemo(() => new Set(base?.links ?? []), [base]);
+  const baseAliases = useMemo(() => new Set(base?.alias ?? []), [base]);
+
+  /** A read-only scalar field; in a review diff `before` (the main value) drives an old→new render. */
+  const viewField = (head: string, after: string, before?: string | null, testId?: string) => (
+    <div className="field">
+      <span className="field-head">{head}</span>
+      <span className="field-value" data-testid={testId}>
+        {diffing ? <ValueDiff before={before} after={after} /> : after.trim() || '—'}
+      </span>
+    </div>
+  );
+
   return (
-    <div className="notation-editor" data-testid="notation-editor">
-      <h2>{isNew ? 'Add concept' : <>Edit concept: <code>{concept.slug}</code></>}</h2>
+    <div className={`notation-editor${readOnly ? ' read-only' : ''}`} data-testid="notation-editor">
+      <h2>
+        {readOnly ? (
+          <>View concept: <code>{concept.slug}</code></>
+        ) : isNew ? (
+          'Add concept'
+        ) : (
+          <>Edit concept: <code>{concept.slug}</code></>
+        )}
+      </h2>
 
       <div className="fields">
-        <div className="field">
-          <span className="field-head">
-            Concept
-            <InfoPopover label="Naming help">
-              <NamingGuide />
-            </InfoPopover>
-          </span>
-          <input
-            data-testid="slug-input"
-            aria-label="Concept"
-            value={slug}
-            onChange={(e) => setSlug(e.target.value)}
-          />
-        </div>
-        <label className="field">
-          <span>Arity</span>
-          <input type="number" min={0} value={arity} onChange={(e) => setArity(e.target.value)} />
-        </label>
-        <label className="field">
-          <span>Area</span>
-          <input value={area} onChange={(e) => setArea(e.target.value)} />
-        </label>
-        <div className="field">
-          <span className="field-head">
-            Properties
-            <InfoPopover label="Properties help">
-              <p className="legend-note" data-testid="properties-help">
-                Space-separated list of notation forms — e.g. <code>symbol</code> <code>indexed</code>{' '}
-                <code>prefix</code> <code>function</code>.
-              </p>
-            </InfoPopover>
-          </span>
-          <input
-            data-testid="property-input"
-            value={property}
-            onChange={(e) => setProperty(e.target.value)}
-          />
-        </div>
+        {readOnly ? (
+          <>
+            {viewField('Concept', slug, base?.slug, 'slug-value')}
+            {viewField('Arity', arity, base?.arity != null ? String(base.arity) : '')}
+            {viewField('Area', area, base?.area, 'area-value')}
+            {viewField('Properties', property, base?.property, 'property-value')}
+          </>
+        ) : (
+          <>
+            <div className="field">
+              <span className="field-head">
+                Concept
+                <InfoPopover label="Naming help">
+                  <NamingGuide />
+                </InfoPopover>
+              </span>
+              <input
+                data-testid="slug-input"
+                aria-label="Concept"
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+              />
+            </div>
+            <label className="field">
+              <span>Arity</span>
+              <input type="number" min={0} value={arity} onChange={(e) => setArity(e.target.value)} />
+            </label>
+            <label className="field">
+              <span>Area</span>
+              <input value={area} onChange={(e) => setArea(e.target.value)} />
+            </label>
+            <div className="field">
+              <span className="field-head">
+                Properties
+                <InfoPopover label="Properties help">
+                  <p className="legend-note" data-testid="properties-help">
+                    Space-separated list of notation forms — e.g. <code>symbol</code>{' '}
+                    <code>indexed</code> <code>prefix</code> <code>function</code>.
+                  </p>
+                </InfoPopover>
+              </span>
+              <input
+                data-testid="property-input"
+                value={property}
+                onChange={(e) => setProperty(e.target.value)}
+              />
+            </div>
+          </>
+        )}
       </div>
 
-      {related.items.length > 0 && (
+      {!readOnly && related.items.length > 0 && (
         <div className="related" data-testid="related-concepts">
           <span className="related-head">Related concepts already in the list</span>
           <ul className="related-list">
@@ -579,21 +693,26 @@ export function NotationEditor({
         </div>
       )}
 
+      {/* Read-only lays Notation (left) and Speech (right) side by side (CSS), filling the otherwise-empty
+          space next to the speech hints; while editing they stack (the wrapper is a single-column grid). */}
+      <div className="ns-split">
       {/* Speech is full-width and multilingual: one template per language (ISO 639-1 key). */}
       <div className="field">
         <span className="field-head">
           Speech
-          <InfoPopover label="Language help">
-            <p className="legend-note" data-testid="language-help">
-              Each template is keyed by an ISO 639-1 language code — <code>en</code> (English),{' '}
-              <code>de</code> (German), <code>fr</code> (French)… Start typing a code to autocomplete.
-              Speak each argument with a <code>$ref</code> (e.g. <code>$x</code>, <code>$1</code>).
-            </p>
-          </InfoPopover>
+          {!readOnly && (
+            <InfoPopover label="Language help">
+              <p className="legend-note" data-testid="language-help">
+                Each template is keyed by an ISO 639-1 language code — <code>en</code> (English),{' '}
+                <code>de</code> (German), <code>fr</code> (French)… Start typing a code to autocomplete.
+                Speak each argument with a <code>$ref</code> (e.g. <code>$x</code>, <code>$1</code>).
+              </p>
+            </InfoPopover>
+          )}
         </span>
         <div className="speech-list" data-testid="speech-list">
           {speechRows.map((row) =>
-            row.editing || row.text.trim() === '' ? (
+            !readOnly && (row.editing || row.text.trim() === '') ? (
               <div
                 className="speech-row editing"
                 key={row.id}
@@ -627,30 +746,52 @@ export function NotationEditor({
                 <span className="lang-badge" data-testid="lang-badge" title={ISO6391.getName(row.lang) || row.lang}>
                   {row.lang || '—'}
                 </span>
-                <span className="speech-text">{row.text}</span>
-                <RowControls
-                  noun="speech"
-                  onEdit={() => speechOps.patch(row.id, { editing: true })}
-                  onRemove={() => speechOps.remove(row.id)}
-                />
+                <span className="speech-text" lang={row.lang || undefined}>
+                  {diffing ? <ValueDiff before={baseSpeech.get(row.lang)} after={row.text} /> : row.text}
+                </span>
+                {!readOnly && (
+                  <RowControls
+                    noun="speech"
+                    onEdit={() => speechOps.patch(row.id, { editing: true })}
+                    onRemove={() => speechOps.remove(row.id)}
+                  />
+                )}
               </div>
             ),
           )}
-          <button type="button" className="add-link" onClick={speechOps.add}>
-            + Add language
-          </button>
+          {/* Languages the PR removed (present in main, gone now) — shown struck through in red. */}
+          {diffing &&
+            [...baseSpeech.keys()]
+              .filter((lang) => !speechRows.some((r) => r.lang === lang))
+              .map((lang) => (
+                <div className="speech-row" key={`removed-${lang}`}>
+                  <span className="lang-badge" title={ISO6391.getName(lang) || lang}>
+                    {lang}
+                  </span>
+                  <span className="speech-text">
+                    <del className="diff-del">{baseSpeech.get(lang)}</del>
+                  </span>
+                </div>
+              ))}
+          {!readOnly && (
+            <button type="button" className="add-link" onClick={speechOps.add}>
+              + Add language
+            </button>
+          )}
         </div>
-        <datalist id="iso-639-langs">
-          {LANG_CODES.map((code) => (
-            <option key={code} value={code}>
-              {ISO6391.getName(code)}
-            </option>
-          ))}
-        </datalist>
+        {!readOnly && (
+          <datalist id="iso-639-langs">
+            {LANG_CODES.map((code) => (
+              <option key={code} value={code}>
+                {ISO6391.getName(code)}
+              </option>
+            ))}
+          </datalist>
+        )}
       </div>
 
       <NotationAuthor
-        label="Notation"
+        label={readOnly && extraRows.length > 0 ? 'Notation (primary)' : 'Notation'}
         mode={mode}
         tex={tex}
         mathml={rawMathml}
@@ -660,176 +801,235 @@ export function NotationEditor({
         onMode={setMode}
         onTex={setTex}
         onMathml={setRawMathml}
+        readOnly={readOnly}
+        beforeTex={diffing ? base?.notations[0]?.tex ?? '' : undefined}
+        beforeMathml={diffing ? base?.notations[0]?.mathml ?? '' : undefined}
       />
+      </div>
 
-      {missingRefs.length > 0 && (
+      {!readOnly && missingRefs.length > 0 && (
         <p className="warn" role="status" data-testid="ref-warning">
           Speech references not marked in the notation: {missingRefs.join(', ')}
         </p>
       )}
-      {unusedArgs.length > 0 && (
+      {!readOnly && unusedArgs.length > 0 && (
         <p className="warn" role="status" data-testid="unused-warning">
           Notation arguments never used in the speech: {unusedArgs.map((a) => `arg="${a}"`).join(', ')}
         </p>
       )}
-      {invalidLangs.length > 0 && (
+      {!readOnly && invalidLangs.length > 0 && (
         <p className="warn" role="status" data-testid="lang-warning">
           Not valid ISO 639-1 language codes (won’t be saved): {invalidLangs.join(', ')}
         </p>
       )}
 
-      {/* Additional renderings (notations[1..]) — each authored exactly like the primary (TeX or raw
-          MathML, full-width source, two-panel preview), with its own inline error slot. */}
-      <div className="field">
-        <span className="field-head">
-          Additional notations
-          <InfoPopover label="Additional notations help">
-            <p className="legend-note">
-              Extra renderings of this concept. Author each in TeX (with <code>{'\\arg'}</code>/
-              <code>{'\\intent'}</code>) or as a full raw <code>{'<math>…</math>'}</code>, keeping its{' '}
-              <code>arg</code>/<code>intent</code> names in sync with the concept.
-            </p>
-          </InfoPopover>
-        </span>
-        <div className="notation-list" data-testid="notation-list">
-          {extraRows.map((row, i) => (
-            <NotationAuthor
-              key={row.id}
-              testId="extra-notation"
-              label={null}
-              mode={row.mode}
-              tex={row.tex}
-              mathml={row.mathml}
-              draft={extraDrafts[i] ?? EMPTY_DRAFT}
-              loading={!engine}
-              onMode={(m) => extraOps.patch(row.id, { mode: m })}
-              onTex={(v) => extraOps.patch(row.id, { tex: v })}
-              onMathml={(v) => extraOps.patch(row.id, { mathml: v })}
-              onRemove={() => extraOps.remove(row.id)}
-            />
-          ))}
-          <button type="button" className="add-link" onClick={extraOps.add}>
-            + Add notation
-          </button>
+      {/* Additional renderings (notations[1..]) — each authored exactly like the primary. Hidden in a
+          view that has none (nothing to show); otherwise each is a preview-only block while read-only. */}
+      {(!readOnly || extraRows.length > 0) && (
+        <div className="field">
+          <span className="field-head">
+            Additional notations
+            {!readOnly && (
+              <InfoPopover label="Additional notations help">
+                <p className="legend-note">
+                  Extra renderings of this concept. Author each in TeX (with <code>{'\\arg'}</code>/
+                  <code>{'\\intent'}</code>) or as a full raw <code>{'<math>…</math>'}</code>, keeping its{' '}
+                  <code>arg</code>/<code>intent</code> names in sync with the concept.
+                </p>
+              </InfoPopover>
+            )}
+          </span>
+          <div className="notation-list" data-testid="notation-list">
+            {extraRows.map((row, i) => (
+              <NotationAuthor
+                key={row.id}
+                testId="extra-notation"
+                label={null}
+                mode={row.mode}
+                tex={row.tex}
+                mathml={row.mathml}
+                draft={extraDrafts[i] ?? EMPTY_DRAFT}
+                loading={!engine}
+                onMode={(m) => extraOps.patch(row.id, { mode: m })}
+                onTex={(v) => extraOps.patch(row.id, { tex: v })}
+                onMathml={(v) => extraOps.patch(row.id, { mathml: v })}
+                onRemove={() => extraOps.remove(row.id)}
+                readOnly={readOnly}
+              />
+            ))}
+            {!readOnly && (
+              <button type="button" className="add-link" onClick={extraOps.add}>
+                + Add notation
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="pair">
-        <div className="field">
-          <span>Links</span>
-          <div className="link-list" data-testid="link-list">
-            {linkRows.map((row) =>
-              row.editing || row.value.trim() === '' ? (
-                <div className="link-row" key={row.id}>
-                  <input
-                    className="link-input"
-                    type="url"
-                    aria-label="Link URL"
-                    placeholder="https://…"
-                    value={row.value}
-                    spellCheck={false}
-                    autoFocus
-                    onChange={(e) => linkOps.patch(row.id, { value: e.target.value })}
-                    onBlur={() => linkOps.patch(row.id, { editing: false })}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        linkOps.patch(row.id, { editing: false });
-                      }
-                    }}
-                  />
-                  <RowControls noun="link" onRemove={() => linkOps.remove(row.id)} />
-                </div>
-              ) : (
-                <div className="link-row" key={row.id}>
-                  {/* not active → clickable */}
-                  <a className="link-display" href={row.value} target="_blank" rel="noreferrer">
-                    {row.value}
-                  </a>
-                  <RowControls
-                    noun="link"
-                    onEdit={() => linkOps.patch(row.id, { editing: true })}
-                    onRemove={() => linkOps.remove(row.id)}
-                  />
-                </div>
-              ),
-            )}
-            <button type="button" className="add-link" onClick={linkOps.add}>
-              + Add link
-            </button>
-          </div>
-        </div>
-        <div className="field">
-          <span>Aliases</span>
-          <div className="alias-list" data-testid="alias-list">
-            {aliasRows.map((row) =>
-              row.editing || row.value.trim() === '' ? (
-                <span className="alias-edit" key={row.id}>
-                  <input
-                    className="alias-input"
-                    aria-label="Alias"
-                    placeholder="snake_case"
-                    value={row.value}
-                    spellCheck={false}
-                    autoFocus
-                    size={Math.max(row.value.length + 1, 8)}
-                    onChange={(e) => aliasOps.patch(row.id, { value: e.target.value })}
-                    onBlur={() => aliasOps.patch(row.id, { editing: false })}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        aliasOps.patch(row.id, { editing: false });
-                      }
-                    }}
-                  />
-                  <RowControls noun="alias" onRemove={() => aliasOps.remove(row.id)} />
-                </span>
-              ) : (
-                // A completed alias is a chip: highlighted when it names a known concept, muted when not.
-                <span
-                  className={`alias-chip ${knownSlugs.has(row.value.trim()) ? 'known' : 'unknown'}`}
-                  key={row.id}
-                  data-testid="alias-chip"
-                >
-                  <span className="alias-text">{row.value}</span>
-                  <RowControls
-                    noun="alias"
-                    onEdit={() => aliasOps.patch(row.id, { editing: true })}
-                    onRemove={() => aliasOps.remove(row.id)}
-                  />
-                </span>
-              ),
-            )}
-            <IconButton className="add-alias" label="Add alias" icon="+" onClick={aliasOps.add} />
-          </div>
-          {aliasWarns.length > 0 && (
-            <p className="warn" role="status" data-testid="alias-warning">
-              {aliasWarns.join('; ')}
-            </p>
+      {(!readOnly || linkRows.length > 0 || aliasRows.length > 0) && (
+        <div className="pair">
+          {(!readOnly || linkRows.length > 0 || (diffing && baseLinks.size > 0)) && (
+            <div className="field">
+              <span>Links</span>
+              <div className="link-list" data-testid="link-list">
+                {linkRows.map((row) =>
+                  !readOnly && (row.editing || row.value.trim() === '') ? (
+                    <div className="link-row" key={row.id}>
+                      <input
+                        className="link-input"
+                        type="url"
+                        aria-label="Link URL"
+                        placeholder="https://…"
+                        value={row.value}
+                        spellCheck={false}
+                        autoFocus
+                        onChange={(e) => linkOps.patch(row.id, { value: e.target.value })}
+                        onBlur={() => linkOps.patch(row.id, { editing: false })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            linkOps.patch(row.id, { editing: false });
+                          }
+                        }}
+                      />
+                      <RowControls noun="link" onRemove={() => linkOps.remove(row.id)} />
+                    </div>
+                  ) : (
+                    <div className="link-row" key={row.id}>
+                      {/* not active → clickable; in a review diff a brand-new link reads green */}
+                      <a
+                        className={`link-display${diffing && !baseLinks.has(row.value) ? ' diff-add' : ''}`}
+                        href={row.value}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {row.value}
+                      </a>
+                      {!readOnly && (
+                        <RowControls
+                          noun="link"
+                          onEdit={() => linkOps.patch(row.id, { editing: true })}
+                          onRemove={() => linkOps.remove(row.id)}
+                        />
+                      )}
+                    </div>
+                  ),
+                )}
+                {/* Links the PR removed (in main, gone now) — struck through in red. */}
+                {diffing &&
+                  [...baseLinks]
+                    .filter((url) => !linkRows.some((r) => r.value === url))
+                    .map((url) => (
+                      <div className="link-row" key={`removed-${url}`}>
+                        <del className="diff-del">{url}</del>
+                      </div>
+                    ))}
+                {!readOnly && (
+                  <button type="button" className="add-link" onClick={linkOps.add}>
+                    + Add link
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          {(!readOnly || aliasRows.length > 0 || (diffing && baseAliases.size > 0)) && (
+            <div className="field">
+              <span>Aliases</span>
+              <div className="alias-list" data-testid="alias-list">
+                {aliasRows.map((row) =>
+                  !readOnly && (row.editing || row.value.trim() === '') ? (
+                    <span className="alias-edit" key={row.id}>
+                      <input
+                        className="alias-input"
+                        aria-label="Alias"
+                        placeholder="snake_case"
+                        value={row.value}
+                        spellCheck={false}
+                        autoFocus
+                        size={Math.max(row.value.length + 1, 8)}
+                        onChange={(e) => aliasOps.patch(row.id, { value: e.target.value })}
+                        onBlur={() => aliasOps.patch(row.id, { editing: false })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            aliasOps.patch(row.id, { editing: false });
+                          }
+                        }}
+                      />
+                      <RowControls noun="alias" onRemove={() => aliasOps.remove(row.id)} />
+                    </span>
+                  ) : (
+                    // A completed alias is a chip: highlighted when it names a known concept, muted when
+                    // not; in a review diff a brand-new alias reads green.
+                    <span
+                      className={`alias-chip ${knownSlugs.has(row.value.trim()) ? 'known' : 'unknown'}${
+                        diffing && !baseAliases.has(row.value) ? ' diff-add' : ''
+                      }`}
+                      key={row.id}
+                      data-testid="alias-chip"
+                    >
+                      <span className="alias-text">{row.value}</span>
+                      {!readOnly && (
+                        <RowControls
+                          noun="alias"
+                          onEdit={() => aliasOps.patch(row.id, { editing: true })}
+                          onRemove={() => aliasOps.remove(row.id)}
+                        />
+                      )}
+                    </span>
+                  ),
+                )}
+                {/* Aliases the PR removed (in main, gone now) — struck through in red. */}
+                {diffing &&
+                  [...baseAliases]
+                    .filter((a) => !aliasRows.some((r) => r.value === a))
+                    .map((a) => (
+                      <span className="alias-chip removed" key={`removed-${a}`}>
+                        <del className="diff-del">{a}</del>
+                      </span>
+                    ))}
+                {!readOnly && <IconButton className="add-alias" label="Add alias" icon="+" onClick={aliasOps.add} />}
+              </div>
+              {!readOnly && aliasWarns.length > 0 && (
+                <p className="warn" role="status" data-testid="alias-warning">
+                  {aliasWarns.join('; ')}
+                </p>
+              )}
+            </div>
           )}
         </div>
-      </div>
+      )}
 
-      {/* Sticky: Done/Cancel stay reachable while the (tall) editor body scrolls. The destructive
-          Delete sits on the opposite side so it can't be hit by a slip aimed at Done/Cancel. */}
+      {/* Sticky footer. In a view it's just "Close"; while editing, Done/Cancel stay reachable as the
+          (tall) body scrolls, with the destructive Delete on the opposite side from a Done/Cancel slip. */}
       <div className="actions">
-        <button
-          type="button"
-          data-testid="save"
-          aria-disabled={saveDisabled}
-          onClick={() => !saveDisabled && onSave(buildUpdated())}
-        >
-          Done
-        </button>
-        {onCancel && (
-          <button type="button" onClick={onCancel}>
-            Cancel
-          </button>
-        )}
-        {onDelete && (
-          <button type="button" className="danger" data-testid="delete" onClick={onDelete}>
-            Delete
-          </button>
+        {readOnly ? (
+          onCancel && (
+            <button type="button" data-testid="close" onClick={onCancel}>
+              Close
+            </button>
+          )
+        ) : (
+          <>
+            <button
+              type="button"
+              data-testid="save"
+              aria-disabled={saveDisabled}
+              onClick={() => !saveDisabled && onSave?.(buildUpdated())}
+            >
+              Done
+            </button>
+            {onCancel && (
+              <button type="button" onClick={onCancel}>
+                Cancel
+              </button>
+            )}
+            {onDelete && (
+              <button type="button" className="danger" data-testid="delete" onClick={onDelete}>
+                Delete
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

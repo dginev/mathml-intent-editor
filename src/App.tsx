@@ -4,13 +4,13 @@ import { conceptId } from './data/conceptId';
 import { buildConceptIndex } from './data/conceptIndex';
 import { conceptMatches, matchRank } from './data/conceptMatch';
 import { classifyChange, type ChangeKind } from './data/pendingChanges';
+import { hasHiddenInfo } from './data/entryPreview';
 import { buildSubmission } from './github/submission';
 import { useDictionary, type Review } from './hooks/useDictionary';
 import { useIdentity } from './hooks/useIdentity';
 import { useTheme } from './hooks/useTheme';
 import { useGlobalFindShortcut } from './hooks/useGlobalFindShortcut';
 import { ConceptTable } from './components/ConceptTable';
-import { EntryDetail } from './components/EntryDetail';
 import { Faq } from './components/Faq';
 import { PrReviewPicker } from './components/PrReviewPicker';
 import { InfoPopover, Toast } from './components/ui';
@@ -60,6 +60,7 @@ export default function App() {
   const [viewing, setViewing] = useState<Concept | null>(null); // the row open in the full-entry preview
   const dialogRef = useRef<HTMLDialogElement>(null);
   const saveDialogRef = useRef<HTMLDialogElement>(null);
+  const viewDialogRef = useRef<HTMLDialogElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
   // Whether the open editor holds unsaved changes (reported by NotationEditor) — dismissing the modal
   // via backdrop/Esc then asks before discarding. A ref: it must not re-render App on every keystroke.
@@ -137,6 +138,14 @@ export default function App() {
     if (savePrompt && !d.open) d.showModal();
     else if (!savePrompt && d.open) d.close();
   }, [savePrompt]);
+
+  // Drive the read-only full-entry "view" dialog (the row ⤢) from `viewing`.
+  useEffect(() => {
+    const d = viewDialogRef.current;
+    if (!d) return;
+    if (viewing && !d.open) d.showModal();
+    else if (!viewing && d.open) d.close();
+  }, [viewing]);
 
   // Config: backing repo (raw reads) and the auth+PR service. Either may be absent → graceful fallback.
   const repo = useMemo(() => repoConfigFromEnv(), []);
@@ -302,6 +311,22 @@ export default function App() {
     (c: Concept): ChangeKind | null => classifyChange(c, baseMap, deletedIds),
     [baseMap, deletedIds],
   );
+
+  // Gate the "more to see" affordance. While reviewing a PR, offer it on EVERY row — the notation's
+  // TeX/raw-MathML source is never in the table and is always worth checking. While browsing, offer it
+  // selectively, wherever an entry simply holds more than the row shows (extra notations/languages,
+  // aliases, raw extras). See entryPreview.
+  const canView = useCallback(
+    (concept: Concept) => reviewing || hasHiddenInfo(concept, speechLang),
+    [reviewing, speechLang],
+  );
+
+  // While reviewing an EDITED row, the `main` version of the open entry — passed to the read-only view so
+  // it renders a per-field old→new diff. (An add/delete is wholly new/gone, so there's nothing to diff.)
+  const viewBase = useMemo(() => {
+    if (!viewing || !reviewing || changeKind(viewing) !== 'changed') return undefined;
+    return baseMap.get(conceptId(viewing));
+  }, [viewing, reviewing, changeKind, baseMap]);
 
   const closeSavePrompt = useCallback(() => setSavePrompt(false), []);
 
@@ -554,7 +579,8 @@ export default function App() {
             onLoadMore={restricting ? undefined : loadMore}
             editingId={editing ? conceptId(editing) : null}
             onDelete={canEdit ? toggleRowDelete : undefined}
-            onView={reviewing ? openView : undefined}
+            onView={openView}
+            canView={canView}
             changeKind={changeKind}
             languages={languages}
             speechLang={speechLang}
@@ -688,13 +714,29 @@ export default function App() {
         onSelect={enterReview}
       />
 
-      {/* Read-only full-entry preview (review workflow): the whole open.yml entry, main vs PR when changed. */}
-      <EntryDetail
-        concept={viewing}
-        base={viewing ? baseMap.get(conceptId(viewing)) : undefined}
-        kind={viewing ? changeKind(viewing) : null}
+      {/* Read-only full-entry preview (the row ⤢): the SAME editor component with editing toggled off —
+          all fields shown read-only, only "Close" in the footer. Backdrop/Esc just closes (nothing to lose). */}
+      <dialog
+        ref={viewDialogRef}
+        className="modal"
+        aria-label={viewing ? `View concept: ${viewing.slug}` : undefined}
         onClose={() => setViewing(null)}
-      />
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setViewing(null);
+        }}
+      >
+        {viewing && (
+          <Suspense fallback={<p className="status">Loading…</p>}>
+            <NotationEditor
+              concept={viewing}
+              readOnly
+              base={viewBase}
+              onCancel={() => setViewing(null)}
+              knownSlugs={knownSlugs}
+            />
+          </Suspense>
+        )}
+      </dialog>
 
       {saveError && <Toast message={saveError} onClose={dismissSaveError} />}
     </div>
