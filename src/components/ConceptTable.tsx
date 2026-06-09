@@ -16,6 +16,8 @@ const columnHelper = createColumnHelper<Concept>();
 type TableMeta = {
   onEdit?: (c: Concept) => void;
   onDelete?: (c: Concept) => void;
+  /** Open a read-only full-entry preview (the review workflow's row 🔍). */
+  onView?: (c: Concept) => void;
   changeKind?: (c: Concept) => ChangeKind | null;
   /** Loaded once any visible row has `tex`; lets the Notation cell re-render the rich form (else stored). */
   engine?: TemmlEngine | null;
@@ -142,10 +144,22 @@ const columns = [
       const meta = table.options.meta as TableMeta | undefined;
       const onEdit = meta?.onEdit;
       const onDelete = meta?.onDelete;
-      if (!onEdit && !onDelete) return null; // hidden unless editing is allowed (signed in)
+      const onView = meta?.onView;
+      if (!onEdit && !onDelete && !onView) return null; // hidden unless editing or reviewing
       const deleted = meta?.changeKind?.(row.original) === 'deleted';
       return (
         <span className="row-actions">
+          {onView && (
+            <button
+              type="button"
+              className="row-view"
+              aria-label={`View full entry: ${row.original.slug}`}
+              title="View full entry"
+              onClick={() => onView(row.original)}
+            >
+              🔍
+            </button>
+          )}
           {onEdit && (
             <button
               type="button"
@@ -186,6 +200,7 @@ export function ConceptTable({
   onLoadMore,
   editingId,
   onDelete,
+  onView,
   changeKind,
   headerActions,
   languages,
@@ -203,6 +218,8 @@ export function ConceptTable({
   editingId?: string | null;
   /** Per-row delete/restore (the ✗ / ↺ button). */
   onDelete?: (concept: Concept) => void;
+  /** Per-row read-only full-entry preview (the review workflow's 🔍 button). */
+  onView?: (concept: Concept) => void;
   /** Classify a row's pending change (added / changed / deleted) for its background colour. */
   changeKind?: (concept: Concept) => ChangeKind | null;
   /** Buttons rendered as a phantom rightmost column in the sticky header (Add entry + batch Save). */
@@ -244,7 +261,7 @@ export function ConceptTable({
     columns,
     getCoreRowModel: getCoreRowModel(),
     state: { columnSizing: { slug: slugWidth } },
-    meta: { onEdit, onDelete, changeKind, engine, languages, speechLang, onSpeechLangChange },
+    meta: { onEdit, onDelete, onView, changeKind, engine, languages, speechLang, onSpeechLangChange },
   });
 
   const rows = table.getRowModel().rows;

@@ -1410,3 +1410,201 @@
   font: inherit;
   cursor: pointer;
 }
+
+/* ---- full-entry preview (review workflow) ---- */
+.modal.entry-detail {
+  width: min(1100px, 96vw);
+}
+.entry-detail-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin: 0 0 0.8rem;
+}
+.entry-detail-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.entry-detail-head h2 code {
+  font-family: var(--mono);
+}
+.entry-arity {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.kind-badge {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+.kind-badge.kind-added {
+  background: var(--diff-add-bg);
+  color: var(--diff-add-accent);
+  border-color: var(--diff-add-accent);
+}
+.kind-badge.kind-changed {
+  background: var(--diff-changed-bg);
+  color: var(--diff-changed-accent);
+  border-color: var(--diff-changed-accent);
+}
+.kind-badge.kind-deleted {
+  background: var(--diff-del-bg);
+  color: var(--diff-del-accent);
+  border-color: var(--diff-del-accent);
+}
+
+.entry-cards {
+  display: grid;
+  gap: 0.9rem;
+}
+.entry-cards.two {
+  grid-template-columns: 1fr 1fr;
+}
+@media (max-width: 720px) {
+  .entry-cards.two {
+    grid-template-columns: 1fr; /* stack on narrow screens */
+  }
+}
+.entry-card {
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem 0.8rem;
+  background: var(--bg);
+  min-width: 0; /* let long content shrink instead of overflowing the grid track */
+}
+.entry-card.tone-current {
+  border-left-color: var(--border);
+}
+.entry-card.tone-proposed {
+  border-left-color: var(--diff-changed-accent);
+}
+.entry-card.tone-add {
+  border-left-color: var(--diff-add-accent);
+}
+.entry-card.tone-del {
+  border-left-color: var(--diff-del-accent);
+}
+.entry-card-label {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.entry-fields {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.entry-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.entry-field dt {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.entry-field dd {
+  margin: 0;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+.entry-field.field-changed {
+  background: var(--diff-changed-bg);
+  border-radius: 5px;
+  padding: 0.25rem 0.4rem;
+  margin: -0.05rem -0.4rem;
+}
+.field-changed-dot {
+  color: var(--diff-changed-accent);
+  font-size: 0.6rem;
+  line-height: 1;
+}
+.notation-list,
+.chip-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.notation-list li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding: 0.2rem 0;
+}
+.mathml-detail math {
+  font-size: 1.1em;
+}
+.primary-badge {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 0.35rem;
+}
+.notation-src {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+  flex: 1 1 100%;
+}
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.5rem;
+}
+.chip-list code {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+}
+.chip-list a {
+  font-size: 0.8rem;
+  color: var(--link);
+  overflow-wrap: anywhere;
+}
+.raw-value {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+}
+.entry-detail .actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.9rem;
+}
+.entry-detail .actions button {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Row 🔍 view button — sits beside ✎/✗ (or alone in review mode). */
+.row-view {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0.15rem;
+}

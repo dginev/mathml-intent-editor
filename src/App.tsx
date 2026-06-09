@@ -10,6 +10,7 @@ import { useIdentity } from './hooks/useIdentity';
 import { useTheme } from './hooks/useTheme';
 import { useGlobalFindShortcut } from './hooks/useGlobalFindShortcut';
 import { ConceptTable } from './components/ConceptTable';
+import { EntryDetail } from './components/EntryDetail';
 import { Faq } from './components/Faq';
 import { PrReviewPicker } from './components/PrReviewPicker';
 import { InfoPopover, Toast } from './components/ui';
@@ -56,6 +57,7 @@ export default function App() {
   const [reviewPr, setReviewPr] = useState<PullRequest | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [changedOnly, setChangedOnly] = useState(false);
+  const [viewing, setViewing] = useState<Concept | null>(null); // the row open in the full-entry preview
   const dialogRef = useRef<HTMLDialogElement>(null);
   const saveDialogRef = useRef<HTMLDialogElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
@@ -216,6 +218,7 @@ export default function App() {
     setEditing(null);
     setCreating(false);
     setSavePrompt(false);
+    setViewing(null);
     setReviewPr(pr);
     setChangedOnly(true);
     setPickerOpen(false);
@@ -225,7 +228,11 @@ export default function App() {
   const exitReview = useCallback(() => {
     setReviewPr(null);
     setChangedOnly(false);
+    setViewing(null);
   }, []);
+
+  // Open the read-only full-entry preview for a row (the review workflow's 🔍).
+  const openView = useCallback((concept: Concept) => setViewing(concept), []);
 
   // Editing/adding requires a signed-in identity only when a service is configured.
   const gated = useCallback(() => {
@@ -547,6 +554,7 @@ export default function App() {
             onLoadMore={restricting ? undefined : loadMore}
             editingId={editing ? conceptId(editing) : null}
             onDelete={canEdit ? toggleRowDelete : undefined}
+            onView={reviewing ? openView : undefined}
             changeKind={changeKind}
             languages={languages}
             speechLang={speechLang}
@@ -678,6 +686,14 @@ export default function App() {
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
         onSelect={enterReview}
+      />
+
+      {/* Read-only full-entry preview (review workflow): the whole open.yml entry, main vs PR when changed. */}
+      <EntryDetail
+        concept={viewing}
+        base={viewing ? baseMap.get(conceptId(viewing)) : undefined}
+        kind={viewing ? changeKind(viewing) : null}
+        onClose={() => setViewing(null)}
       />
 
       {saveError && <Toast message={saveError} onClose={dismissSaveError} />}
